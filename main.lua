@@ -22,9 +22,6 @@ local STATE = { StartTime = os.time() }
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
 
---========================================================
--- UI HELPERS
---========================================================
 local function Gradient(obj, c1, c2, rot)
     local g = Instance.new("UIGradient")
     g.Color = ColorSequence.new(c1, c2)
@@ -81,9 +78,6 @@ local function Breathe(obj, c1, c2, dur)
     end)
 end
 
---========================================================
--- EXECUTOR DETECTION (рабочий)
---========================================================
 local function GetEnv()
     if type(getgenv) == "function" then
         local ok, env = pcall(getgenv)
@@ -97,7 +91,6 @@ local function GetEnv()
 end
 
 local function DetectExecutor()
-    -- 1. Прямые API инжекторов
     if type(identifyexecutor) == "function" then
         local ok, n = pcall(identifyexecutor)
         if ok and n and n ~= "" then return tostring(n) end
@@ -106,51 +99,35 @@ local function DetectExecutor()
         local ok, n = pcall(getexecutorname)
         if ok and n and n ~= "" then return tostring(n) end
     end
-
-    -- 2. По уникальным глобалам
     local env = GetEnv()
     local signatures = {
-        { name = "Synapse X",        check = function() return rawget(env, "syn") ~= nil end },
-        { name = "Script-Ware",      check = function() return rawget(env, "ScriptWare") ~= nil or rawget(env, "SW") ~= nil end },
-        { name = "Krnl",             check = function() return rawget(env, "KRNL_LOADED") ~= nil end },
-        { name = "Fluxus",           check = function() return rawget(env, "fluxus") ~= nil end },
-        { name = "Solara",           check = function() return rawget(env, "Solara") ~= nil end },
-        { name = "Wave",             check = function() return rawget(env, "Wave") ~= nil end },
-        { name = "Delta",            check = function() return rawget(env, "Delta") ~= nil end },
-        { name = "AWP",              check = function() return rawget(env, "AWP") ~= nil end },
-        { name = "Hydrogen",         check = function() return rawget(env, "Hydrogen") ~= nil end },
-        { name = "SirHurt",          check = function() return rawget(env, "is_sirhurt_closure") ~= nil end },
-        { name = "Sentinel",         check = function() return rawget(env, "secure_load") ~= nil end },
-        { name = "Oxygen U",         check = function() return rawget(env, "Oxygen") ~= nil end },
-        { name = "Trigona",          check = function() return rawget(env, "Trigona") ~= nil end },
-        { name = "Nihon",            check = function() return rawget(env, "Nihon") ~= nil end },
-        { name = "Valyse",           check = function() return rawget(env, "Valyse") ~= nil end },
-        { name = "Xeno",             check = function() return rawget(env, "Xeno") ~= nil end },
-        { name = "Electron",         check = function() return rawget(env, "Electron") ~= nil end },
-        { name = "Codex",            check = function() return rawget(env, "Codex") ~= nil end },
+        { name = "Synapse X",   check = function() return rawget(env, "syn") ~= nil end },
+        { name = "Script-Ware", check = function() return rawget(env, "ScriptWare") ~= nil or rawget(env, "SW") ~= nil end },
+        { name = "Krnl",        check = function() return rawget(env, "KRNL_LOADED") ~= nil end },
+        { name = "Fluxus",      check = function() return rawget(env, "fluxus") ~= nil end },
+        { name = "Solara",      check = function() return rawget(env, "Solara") ~= nil end },
+        { name = "Wave",        check = function() return rawget(env, "Wave") ~= nil end },
+        { name = "Delta",       check = function() return rawget(env, "Delta") ~= nil end },
+        { name = "AWP",         check = function() return rawget(env, "AWP") ~= nil end },
+        { name = "Hydrogen",    check = function() return rawget(env, "Hydrogen") ~= nil end },
+        { name = "SirHurt",     check = function() return rawget(env, "is_sirhurt_closure") ~= nil end },
+        { name = "Sentinel",    check = function() return rawget(env, "secure_load") ~= nil end },
+        { name = "Xeno",        check = function() return rawget(env, "Xeno") ~= nil end },
     }
     for _, sig in ipairs(signatures) do
         local ok, res = pcall(sig.check)
         if ok and res then return sig.name end
     end
-
-    -- 3. По косвенным признакам
     if type(request) == "function" or type(http_request) == "function" then
         return "Неизвестный (HTTP API)"
     end
-
     return "Неизвестный"
 end
 
---========================================================
--- FUNCTION COUNT (рабочий)
---========================================================
 local function HasGlobal(name)
     local env = GetEnv()
-    -- Прямой доступ
     if env[name] ~= nil then return true end
     if _G[name] ~= nil then return true end
-    -- Через rawget
     local ok, v = pcall(function() return rawget(env, name) end)
     if ok and v ~= nil then return true end
     return false
@@ -158,33 +135,23 @@ end
 
 local function CountFunctions()
     local checks = {
-        "loadstring", "getgenv", "getfenv", "setfenv", "getsenv", "gettenv",
-        "setclipboard", "toclipboard",
-        "writefile", "readfile", "appendfile", "isfile", "isfolder",
-        "makefolder", "delfile", "delfolder", "listfiles",
-        "HttpGet", "HttpPost", "request", "http_request", "http",
-        "hookfunction", "hookmetamethod", "getrawmetatable", "setreadonly",
-        "getnamecallmethod", "checkcaller", "islclosed", "islclosure",
-        "getconnections", "firesignal", "fireclickdetector",
-        "firetouchinterest", "fireproximityprompt",
-        "getgc", "getinstances", "getnilinstances", "getloadedmodules",
-        "getreg", "getupvalues", "getconstants", "setupvalue", "setconstant",
-        "queue_on_teleport", "setfpscap", "getfpscap",
-        "identifyexecutor", "getexecutorname", "getscriptbytecode",
-        "getcustomasset", "mousemoverel", "mouse1click", "mouse1press",
-        "mouse2click", "keypress", "keyrelease",
-        "decompile", "dumpstring", "getscripthash", "getscriptclosure",
-        "getcallingscript", "getfunctionhash", "gethui", "protectgui",
-        "cloneref", "compareinstances", "getactors", "run_secure",
+        "loadstring","getgenv","getfenv","setfenv","getsenv","gettenv",
+        "setclipboard","toclipboard","writefile","readfile","isfile","isfolder",
+        "makefolder","delfile","listfiles","HttpGet","request","http_request",
+        "hookfunction","hookmetamethod","getrawmetatable","setreadonly",
+        "getnamecallmethod","checkcaller","getconnections","firesignal",
+        "firetouchinterest","getgc","getinstances","getnilinstances",
+        "getloadedmodules","getupvalues","getconstants","setupvalue",
+        "queue_on_teleport","setfpscap","identifyexecutor","getexecutorname",
+        "getscriptbytecode","getcustomasset","mousemoverel","mouse1click",
+        "keypress","keyrelease","decompile","dumpstring","gethui","protectgui",
+        "cloneref","compareinstances",
     }
     local loaded, total = 0, #checks
     local missing = {}
     for _, name in ipairs(checks) do
-        if HasGlobal(name) then
-            loaded = loaded + 1
-        else
-            table.insert(missing, name)
-        end
+        if HasGlobal(name) then loaded = loaded + 1
+        else table.insert(missing, name) end
     end
     return loaded, total, missing
 end
@@ -202,9 +169,6 @@ local function Evaluate(loaded, total)
     return pct, grade, color
 end
 
---========================================================
--- COMPILER / DECOMPILER
---========================================================
 local function SafeDump(fn)
     if type(string.dump) == "function" then
         local ok, bc = pcall(string.dump, fn)
@@ -260,9 +224,6 @@ function Decompiler.Try(code)
     return "-- BCL: байткод получен (" .. #bc .. " байт).\n-- Для полной декомпиляции нужен внешний движок.\n\n" .. extracted
 end
 
---========================================================
--- OBFUSCATOR + LUARMOR
---========================================================
 local Obfuscator = {}
 function Obfuscator.Hex(src)
     return (src:gsub('"([^"]*)"', function(s)
@@ -291,9 +252,6 @@ function AntiLuarmor.Detect(code)
     return false
 end
 
---========================================================
--- PLAYER PROFILE (реальный)
---========================================================
 local function GetPlayerProfile()
     local name, display, userId, avatar = "?", "?", 0, nil
     if LP then
@@ -308,9 +266,6 @@ local function GetPlayerProfile()
     return name, display, userId, avatar
 end
 
---========================================================
--- UI
---========================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BCL_Main"
 ScreenGui.ResetOnSpawn = false
@@ -539,4 +494,235 @@ TObf1.TextColor3 = COLORS.Text
 TObf1.Font = Enum.Font.GothamBold
 TObf1.TextSize = 11
 TObf1.Parent = PageTools
-Corner(TObf1, 5); Gradient(TObf1, COLO
+Corner(TObf1, 5); Gradient(TObf1, COLORS.DarkRed, COLORS.BrightRed, 0)
+
+local TObf2 = Instance.new("TextButton")
+TObf2.Size = UDim2.new(0, 120, 0, 26)
+TObf2.Position = UDim2.new(0, 134, 0, 80)
+TObf2.BackgroundColor3 = COLORS.Red
+TObf2.Text = "Обфускация L2"
+TObf2.TextColor3 = COLORS.Text
+TObf2.Font = Enum.Font.GothamBold
+TObf2.TextSize = 11
+TObf2.Parent = PageTools
+Corner(TObf2, 5); Gradient(TObf2, COLORS.DarkRed, COLORS.BrightRed, 0)
+
+local TCopy = Instance.new("TextButton")
+TCopy.Size = UDim2.new(0, 120, 0, 26)
+TCopy.Position = UDim2.new(0, 260, 0, 80)
+TCopy.BackgroundColor3 = COLORS.DeepRed
+TCopy.Text = "Копировать"
+TCopy.TextColor3 = COLORS.Text
+TCopy.Font = Enum.Font.GothamBold
+TCopy.TextSize = 11
+TCopy.Parent = PageTools
+Corner(TCopy, 5); Stroke(TCopy, COLORS.Red, 1)
+
+local TOut = Instance.new("TextBox")
+TOut.Size = UDim2.new(1, -16, 1, -116)
+TOut.Position = UDim2.new(0, 8, 0, 112)
+TOut.BackgroundColor3 = COLORS.Black
+TOut.TextColor3 = COLORS.Text
+TOut.Font = Enum.Font.Code
+TOut.TextSize = 11
+TOut.TextWrapped = true
+TOut.TextXAlignment = Enum.TextXAlignment.Left
+TOut.TextYAlignment = Enum.TextYAlignment.Top
+TOut.TextEditable = false
+TOut.Text = "-- BCL Инструменты готовы."
+TOut.Parent = PageTools
+Corner(TOut, 5); Stroke(TOut, COLORS.Red, 1)
+
+TObf1.MouseButton1Click:Connect(function() TOut.Text = Obfuscator.Run(TIn.Text, 1) end)
+TObf2.MouseButton1Click:Connect(function() TOut.Text = Obfuscator.Run(TIn.Text, 2) end)
+TCopy.MouseButton1Click:Connect(function()
+    if type(setclipboard) == "function" then
+        pcall(setclipboard, TOut.Text)
+        TOut.Text = TOut.Text .. "\n-- Скопировано."
+    else
+        TOut.Text = TOut.Text .. "\n-- setclipboard недоступен."
+    end
+end)
+
+-- Info page
+local ProfileCard = Instance.new("Frame")
+ProfileCard.Size = UDim2.new(1, -16, 0, 80)
+ProfileCard.Position = UDim2.new(0, 8, 0, 0)
+ProfileCard.BackgroundColor3 = COLORS.Black
+ProfileCard.BorderSizePixel = 0
+ProfileCard.Parent = PageInfo
+Corner(ProfileCard, 6); Stroke(ProfileCard, COLORS.Red, 1)
+Gradient(ProfileCard, COLORS.Black, COLORS.DeepRed, 135)
+
+local BigAvatar = Instance.new("ImageLabel")
+BigAvatar.Size = UDim2.new(0, 60, 0, 60)
+BigAvatar.Position = UDim2.new(0, 10, 0, 10)
+BigAvatar.BackgroundColor3 = COLORS.Black
+BigAvatar.Image = ""
+BigAvatar.Parent = ProfileCard
+Corner(BigAvatar, 30)
+local bigStroke = Stroke(BigAvatar, COLORS.BrightRed, 2)
+Pulse(bigStroke, 1, 3.5, 1.5)
+local BGL = Instance.new("TextLabel")
+BGL.Size = UDim2.new(1,0,1,0); BGL.BackgroundTransparency = 1
+BGL.Text = "?"; BGL.TextColor3 = COLORS.BrightRed
+BGL.Font = Enum.Font.GothamBold; BGL.TextSize = 28; BGL.Parent = BigAvatar
+
+local PName = Instance.new("TextLabel")
+PName.Size = UDim2.new(1, -84, 0, 20)
+PName.Position = UDim2.new(0, 80, 0, 10)
+PName.BackgroundTransparency = 1
+PName.Text = "—"
+PName.TextColor3 = COLORS.Text
+PName.Font = Enum.Font.GothamBold
+PName.TextSize = 16
+PName.TextXAlignment = Enum.TextXAlignment.Left
+PName.Parent = ProfileCard
+
+local PSub = Instance.new("TextLabel")
+PSub.Size = UDim2.new(1, -84, 0, 18)
+PSub.Position = UDim2.new(0, 80, 0, 32)
+PSub.BackgroundTransparency = 1
+PSub.Text = "—"
+PSub.TextColor3 = COLORS.SubText
+PSub.Font = Enum.Font.Gotham
+PSub.TextSize = 12
+PSub.TextXAlignment = Enum.TextXAlignment.Left
+PSub.Parent = ProfileCard
+
+local PId = Instance.new("TextLabel")
+PId.Size = UDim2.new(1, -84, 0, 18)
+PId.Position = UDim2.new(0, 80, 0, 50)
+PId.BackgroundTransparency = 1
+PId.Text = "—"
+PId.TextColor3 = COLORS.SubText
+PId.Font = Enum.Font.Gotham
+PId.TextSize = 11
+PId.TextXAlignment = Enum.TextXAlignment.Left
+PId.Parent = ProfileCard
+
+local ExecCard = Instance.new("Frame")
+ExecCard.Size = UDim2.new(1, -16, 0, 32)
+ExecCard.Position = UDim2.new(0, 8, 0, 86)
+ExecCard.BackgroundColor3 = COLORS.Black
+ExecCard.BorderSizePixel = 0
+ExecCard.Parent = PageInfo
+Corner(ExecCard, 6); Stroke(ExecCard, COLORS.Red, 1)
+
+local ExecLabel = Instance.new("TextLabel")
+ExecLabel.Size = UDim2.new(1, -16, 1, 0)
+ExecLabel.Position = UDim2.new(0, 8, 0, 0)
+ExecLabel.BackgroundTransparency = 1
+ExecLabel.Text = "Инжектор: —"
+ExecLabel.TextColor3 = COLORS.Text
+ExecLabel.Font = Enum.Font.Gotham
+ExecLabel.TextSize = 12
+ExecLabel.TextXAlignment = Enum.TextXAlignment.Left
+ExecLabel.Parent = ExecCard
+
+local FuncCard = Instance.new("Frame")
+FuncCard.Size = UDim2.new(1, -16, 0, 66)
+FuncCard.Position = UDim2.new(0, 8, 0, 124)
+FuncCard.BackgroundColor3 = COLORS.Black
+FuncCard.BorderSizePixel = 0
+FuncCard.Parent = PageInfo
+Corner(FuncCard, 6); Stroke(FuncCard, COLORS.Red, 1)
+
+local FuncLabel = Instance.new("TextLabel")
+FuncLabel.Size = UDim2.new(1, -16, 0, 20)
+FuncLabel.Position = UDim2.new(0, 8, 0, 4)
+FuncLabel.BackgroundTransparency = 1
+FuncLabel.Text = "Функций загружено: —"
+FuncLabel.TextColor3 = COLORS.Text
+FuncLabel.Font = Enum.Font.Gotham
+FuncLabel.TextSize = 12
+FuncLabel.TextXAlignment = Enum.TextXAlignment.Left
+FuncLabel.Parent = FuncCard
+
+local BarBg = Instance.new("Frame")
+BarBg.Size = UDim2.new(1, -16, 0, 12)
+BarBg.Position = UDim2.new(0, 8, 0, 26)
+BarBg.BackgroundColor3 = COLORS.DeepRed
+BarBg.BorderSizePixel = 0
+BarBg.Parent = FuncCard
+Corner(BarBg, 6)
+
+local BarFill = Instance.new("Frame")
+BarFill.Size = UDim2.new(0, 0, 1, 0)
+BarFill.BackgroundColor3 = COLORS.BrightRed
+BarFill.BorderSizePixel = 0
+BarFill.Parent = BarBg
+Corner(BarFill, 6)
+Gradient(BarFill, COLORS.Red, COLORS.BrightRed, 0)
+
+local GradeLabel = Instance.new("TextLabel")
+GradeLabel.Size = UDim2.new(1, -16, 0, 18)
+GradeLabel.Position = UDim2.new(0, 8, 0, 42)
+GradeLabel.BackgroundTransparency = 1
+GradeLabel.Text = "Оценка: —"
+GradeLabel.TextColor3 = COLORS.SubText
+GradeLabel.Font = Enum.Font.GothamBold
+GradeLabel.TextSize = 11
+GradeLabel.TextXAlignment = Enum.TextXAlignment.Left
+GradeLabel.Parent = FuncCard
+
+local Uptime = Instance.new("TextLabel")
+Uptime.Size = UDim2.new(1, -16, 0, 16)
+Uptime.Position = UDim2.new(0, 8, 0, 194)
+Uptime.BackgroundTransparency = 1
+Uptime.Text = "Сессия: 00:00"
+Uptime.TextColor3 = COLORS.SubText
+Uptime.Font = Enum.Font.Code
+Uptime.TextSize = 11
+Uptime.TextXAlignment = Enum.TextXAlignment.Left
+Uptime.Parent = PageInfo
+
+task.spawn(function()
+    while ScreenGui.Parent do
+        local s = os.time() - STATE.StartTime
+        Uptime.Text = string.format("Сессия: %02d:%02d", math.floor(s/60), s%60)
+        task.wait(1)
+    end
+end)
+
+local function RefreshInfo()
+    local name, display, userId, avatar = GetPlayerProfile()
+    PName.Text = display .. " (@" .. name .. ")"
+    PSub.Text = "UserId: " .. tostring(userId)
+    PId.Text = "BCL v" .. CONFIG.Version .. " • Статус: активен"
+    PId.TextColor3 = COLORS.Green
+    if avatar then
+        BigAvatar.Image = avatar
+        BGL.Text = ""
+    else
+        BGL.Text = string.upper(string.sub(name, 1, 1))
+    end
+
+    ExecLabel.Text = "Инжектор: " .. DetectExecutor()
+
+    local loaded, total, missing = CountFunctions()
+    FuncLabel.Text = string.format("Функций загружено: %d / %d", loaded, total)
+    local pct, grade, color = Evaluate(loaded, total)
+    GradeLabel.Text = string.format("Оценка: %d%% — %s", pct, grade)
+    GradeLabel.TextColor3 = color
+
+    local t0 = tick()
+    task.spawn(function()
+        while tick() - t0 < 0.6 do
+            local a = (tick() - t0) / 0.6
+            local e = 1 - (1 - a)^2
+            BarFill.Size = UDim2.new((pct/100) * e, 0, 1, 0)
+            task.wait(0.02)
+        end
+        BarFill.Size = UDim2.new(pct/100, 0, 1, 0)
+    end)
+
+    print("[BCL] Загружено функций:", loaded, "/", total)
+    if #missing > 0 then
+        print("[BCL] Отсутствуют: " .. table.concat(missing, ", "))
+    end
+end
+
+RefreshInfo()
+Breathe(mainStroke, COLORS.BrightRed, COLORS.DarkRed, 3)
+TabInfo.MouseButton1Click:Fire()
