@@ -1,16 +1,27 @@
 --[[
     BazCrackLua (BCL)
-    Version: 1.0.1
+    Version: 1.0.2
     Changelog:
-      - Fixed Info tab (real player profile, executor detection, function count)
-      - Added sidebar navigation with custom vector icons
-      - Default language: English
-      - Improved compiler (multiple dump backends)
-      - Improved decompiler (auto-detect loadstring / bytecode / hex)
-      - Fixed SafeDump crash on executors without string.dump
+      - v1.0.2: improved icons (gradient + stroke, no letters)
+      - v1.0.2: double-execute protection (BCL_LOADED flag)
+      - v1.0.2: fix for executors without string.dump (dumpstring -> getscriptbytecode -> decompile)
+      - v1.0.2: unload button (X)
+      - v1.0.2: new TEST tab (Infinite Yield, UNC test)
+      - v1.0.2: GUI polish, readable textboxes
+      - v1.0.2: Copy buttons on Compiler / Decompiler / Tools
+      - v1.0.2: expanded executor list (Potassium, Volt, Luna, Madium, Arceus X, Real, Velocity, ...)
 --]]
 
-local CONFIG = { Version = "1.0.1" }
+--========================================================
+-- DOUBLE-EXECUTE PROTECTION
+--========================================================
+if _G.BCL_LOADED then
+    warn("[BCL] Already loaded. Unload first (X button).")
+    return
+end
+_G.BCL_LOADED = true
+
+local CONFIG = { Version = "1.0.2" }
 
 local COLORS = {
     Black     = Color3.fromRGB(0, 0, 0),
@@ -89,49 +100,85 @@ local function Breathe(obj, c1, c2, dur)
 end
 
 --========================================================
--- VECTOR ICONS (draw with Frame)
+-- VECTOR ICONS (improved, no letters)
 --========================================================
 local Icons = {}
 
 local function IconBase(parent)
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(0, 20, 0, 20)
+    f.Size = UDim2.new(0, 22, 0, 22)
     f.BackgroundTransparency = 1
     f.Parent = parent
     return f
 end
 
+local function Bar(parent, size, pos, color)
+    local b = Instance.new("Frame")
+    b.Size = size; b.Position = pos
+    b.BackgroundColor3 = color or COLORS.BrightRed
+    b.BorderSizePixel = 0
+    b.Parent = parent
+    local g = Instance.new("UIGradient")
+    g.Color = ColorSequence.new(COLORS.Red, COLORS.BrightRed)
+    g.Rotation = 45
+    g.Parent = b
+    return b
+end
+
 Icons.compile = function(parent)
     local f = IconBase(parent)
-    local l = Instance.new("Frame"); l.Size = UDim2.new(0, 3, 0, 14); l.Position = UDim2.new(0.2, 0, 0.15, 0); l.BackgroundColor3 = COLORS.BrightRed; l.BorderSizePixel = 0; l.Parent = f
-    local r = Instance.new("Frame"); r.Size = UDim2.new(0, 3, 0, 14); r.Position = UDim2.new(0.6, 0, 0.15, 0); r.BackgroundColor3 = COLORS.BrightRed; r.BorderSizePixel = 0; r.Parent = f
-    local t = Instance.new("Frame"); t.Size = UDim2.new(0, 8, 0, 3); t.Position = UDim2.new(0.3, 0, 0.5, 0); t.BackgroundColor3 = COLORS.BrightRed; t.BorderSizePixel = 0; t.Parent = f
+    Bar(f, UDim2.new(0, 3, 0, 16), UDim2.new(0.15, 0, 0.15, 0))
+    Bar(f, UDim2.new(0, 3, 0, 16), UDim2.new(0.7, 0, 0.15, 0))
+    Bar(f, UDim2.new(0, 10, 0, 3), UDim2.new(0.3, 0, 0.45, 0))
     return f
 end
 
 Icons.decompile = function(parent)
     local f = IconBase(parent)
-    local t = Instance.new("Frame"); t.Size = UDim2.new(0, 8, 0, 3); t.Position = UDim2.new(0.3, 0, 0.5, 0); t.BackgroundColor3 = COLORS.BrightRed; t.BorderSizePixel = 0; t.Parent = f
-    local l = Instance.new("Frame"); l.Size = UDim2.new(0, 3, 0, 14); l.Position = UDim2.new(0.2, 0, 0.15, 0); l.BackgroundColor3 = COLORS.BrightRed; l.BorderSizePixel = 0; l.Parent = f
-    local r = Instance.new("Frame"); r.Size = UDim2.new(0, 3, 0, 14); r.Position = UDim2.new(0.6, 0, 0.15, 0); r.BackgroundColor3 = COLORS.BrightRed; r.BorderSizePixel = 0; r.Parent = f
+    Bar(f, UDim2.new(0, 10, 0, 3), UDim2.new(0.3, 0, 0.45, 0))
+    Bar(f, UDim2.new(0, 3, 0, 16), UDim2.new(0.15, 0, 0.15, 0))
+    Bar(f, UDim2.new(0, 3, 0, 16), UDim2.new(0.7, 0, 0.15, 0))
     return f
 end
 
 Icons.tools = function(parent)
     local f = IconBase(parent)
-    local h = Instance.new("Frame"); h.Size = UDim2.new(0, 3, 0, 12); h.Position = UDim2.new(0.45, 0, 0.35, 0); h.BackgroundColor3 = COLORS.BrightRed; h.BorderSizePixel = 0; h.Parent = f
-    local head = Instance.new("Frame"); head.Size = UDim2.new(0, 12, 0, 4); head.Position = UDim2.new(0.2, 0, 0.15, 0); head.BackgroundColor3 = COLORS.BrightRed; head.BorderSizePixel = 0; head.Parent = f
+    Bar(f, UDim2.new(0, 3, 0, 14), UDim2.new(0.45, 0, 0.3, 0))
+    Bar(f, UDim2.new(0, 14, 0, 4), UDim2.new(0.18, 0, 0.12, 0))
+    return f
+end
+
+Icons.test = function(parent)
+    local f = IconBase(parent)
+    local r = Instance.new("Frame")
+    r.Size = UDim2.new(0, 16, 0, 16)
+    r.Position = UDim2.new(0.12, 0, 0.12, 0)
+    r.BackgroundTransparency = 1
+    r.Parent = f
+    local s = Instance.new("UIStroke"); s.Color = COLORS.BrightRed; s.Thickness = 2; s.Parent = r
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = r
+    Bar(f, UDim2.new(0, 8, 0, 3), UDim2.new(0.35, 0, 0.2, 0), COLORS.Red)
+    Bar(f, UDim2.new(0, 3, 0, 6), UDim2.new(0.44, 0, 0.45, 0))
     return f
 end
 
 Icons.info = function(parent)
     local f = IconBase(parent)
-    local c = Instance.new("Frame"); c.Size = UDim2.new(0, 14, 0, 14); c.Position = UDim2.new(0.15, 0, 0.15, 0); c.BackgroundTransparency = 1; c.Parent = f
-    local cs = Instance.new("UIStroke"); cs.Color = COLORS.BrightRed; cs.Thickness = 2; cs.Parent = c
-    local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(1, 0); cc.Parent = c
-    local dot = Instance.new("Frame"); dot.Size = UDim2.new(0, 3, 0, 3); dot.Position = UDim2.new(0.42, 0, 0.25, 0); dot.BackgroundColor3 = COLORS.BrightRed; dot.BorderSizePixel = 0; dot.Parent = f
-    local cc2 = Instance.new("UICorner"); cc2.CornerRadius = UDim.new(1, 0); cc2.Parent = dot
-    local stem = Instance.new("Frame"); stem.Size = UDim2.new(0, 3, 0, 6); stem.Position = UDim2.new(0.42, 0, 0.5, 0); stem.BackgroundColor3 = COLORS.BrightRed; stem.BorderSizePixel = 0; stem.Parent = f
+    local r = Instance.new("Frame")
+    r.Size = UDim2.new(0, 16, 0, 16)
+    r.Position = UDim2.new(0.12, 0, 0.12, 0)
+    r.BackgroundTransparency = 1
+    r.Parent = f
+    local s = Instance.new("UIStroke"); s.Color = COLORS.BrightRed; s.Thickness = 2; s.Parent = r
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = r
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 3, 0, 3)
+    dot.Position = UDim2.new(0.44, 0, 0.28, 0)
+    dot.BackgroundColor3 = COLORS.BrightRed
+    dot.BorderSizePixel = 0
+    dot.Parent = f
+    local dc = Instance.new("UICorner"); dc.CornerRadius = UDim.new(1, 0); dc.Parent = dot
+    Bar(f, UDim2.new(0, 3, 0, 6), UDim2.new(0.44, 0, 0.5, 0))
     return f
 end
 
@@ -173,6 +220,19 @@ local function DetectExecutor()
         { name = "SirHurt",     check = function() return rawget(env, "is_sirhurt_closure") ~= nil end },
         { name = "Sentinel",    check = function() return rawget(env, "secure_load") ~= nil end },
         { name = "Xeno",        check = function() return rawget(env, "Xeno") ~= nil end },
+        { name = "Potassium",   check = function() return rawget(env, "Potassium") ~= nil or rawget(env, "potassium") ~= nil end },
+        { name = "Volt",        check = function() return rawget(env, "Volt") ~= nil or rawget(env, "volt") ~= nil end },
+        { name = "Luna",        check = function() return rawget(env, "Luna") ~= nil or rawget(env, "luna") ~= nil end },
+        { name = "Madium",      check = function() return rawget(env, "Madium") ~= nil or rawget(env, "madium") ~= nil end },
+        { name = "Arceus X",    check = function() return rawget(env, "ArceusX") ~= nil or rawget(env, "Arceus") ~= nil or rawget(env, "arceusx") ~= nil end },
+        { name = "Real",        check = function() return rawget(env, "Real") ~= nil or rawget(env, "real") ~= nil end },
+        { name = "Velocity",    check = function() return rawget(env, "Velocity") ~= nil or rawget(env, "velocity") ~= nil end },
+        { name = "Codex",       check = function() return rawget(env, "Codex") ~= nil end },
+        { name = "Oxygen U",    check = function() return rawget(env, "Oxygen") ~= nil end },
+        { name = "Trigona",     check = function() return rawget(env, "Trigona") ~= nil end },
+        { name = "Nihon",       check = function() return rawget(env, "Nihon") ~= nil end },
+        { name = "Valyse",      check = function() return rawget(env, "Valyse") ~= nil end },
+        { name = "Electron",    check = function() return rawget(env, "Electron") ~= nil end },
     }
     for _, sig in ipairs(signatures) do
         local ok, res = pcall(sig.check)
@@ -205,7 +265,7 @@ local function CountFunctions()
         "queue_on_teleport","setfpscap","identifyexecutor","getexecutorname",
         "getscriptbytecode","getcustomasset","mousemoverel","mouse1click",
         "keypress","keyrelease","decompile","dumpstring","gethui","protectgui",
-        "cloneref","compareinstances",
+        "cloneref","compareinstances","getscriptclosure","getscripthash",
     }
     local loaded, total = 0, #checks
     local missing = {}
@@ -230,16 +290,19 @@ local function Evaluate(loaded, total)
 end
 
 --========================================================
--- COMPILER / DECOMPILER (improved)
+-- COMPILER / DECOMPILER (no string.dump required)
 --========================================================
 local function SafeDump(fn)
-    local backends = {
-        function() if type(string.dump) == "function" then return string.dump(fn) end end,
-        function() if type(dumpstring) == "function" then return dumpstring(fn) end end,
-        function() if type(getscriptbytecode) == "function" then return getscriptbytecode(fn) end end,
-    }
-    for _, fnc in ipairs(backends) do
-        local ok, bc = pcall(fnc)
+    if type(dumpstring) == "function" then
+        local ok, bc = pcall(dumpstring, fn)
+        if ok and bc and type(bc) == "string" then return bc end
+    end
+    if type(getscriptbytecode) == "function" then
+        local ok, bc = pcall(getscriptbytecode, fn)
+        if ok and bc and type(bc) == "string" then return bc end
+    end
+    if type(string.dump) == "function" then
+        local ok, bc = pcall(string.dump, fn)
         if ok and bc and type(bc) == "string" then return bc end
     end
     return nil, "no dump backend available"
@@ -247,20 +310,16 @@ end
 
 local Compiler = {}
 function Compiler.Compile(src)
-    if type(loadstring) ~= "function" and type(load) ~= "function" then
-        return nil, "loadstring / load unavailable"
-    end
-    local loader = loadstring or load
-    local fn, err = loader(src, "=BCL")
+    if type(loadstring) ~= "function" then return nil, "loadstring unavailable" end
+    local fn, err = loadstring(src, "=BCL")
     if not fn then return nil, "compile error: " .. tostring(err) end
     local bc, derr = SafeDump(fn)
     if not bc then return nil, derr end
     return bc
 end
 function Compiler.Run(src)
-    local loader = loadstring or load
-    if type(loader) ~= "function" then return nil, "loadstring unavailable" end
-    local fn, err = loader(src)
+    if type(loadstring) ~= "function" then return nil, "loadstring unavailable" end
+    local fn, err = loadstring(src)
     if not fn then return nil, err end
     local ok, res = pcall(fn)
     if not ok then return nil, res end
@@ -273,21 +332,63 @@ function Decompiler.FromLoadstring(code)
             or code:match('load%s*%(%s*["\'](.-)["\']%s*%)')
     return inner or code
 end
+function Decompiler.ExtractUrl(code)
+    return code:match('HttpGet%s*%(%s*["\'](.-)["\']%s*%)')
+        or code:match('GetAsync%s*%(%s*["\'](.-)["\']%s*%)')
+end
 function Decompiler.Try(code)
     local extracted = Decompiler.FromLoadstring(code)
-    local loader = loadstring or load
-    if type(loader) ~= "function" then
+
+    -- 1) HTTP source fetch
+    local url = Decompiler.ExtractUrl(code)
+    if url and type(game.HttpGet) == "function" then
+        local ok, src = pcall(function() return game:HttpGet(url) end)
+        if ok and src and #src > 0 then
+            return "-- BCL: source fetched directly from URL.\n-- URL: " .. url .. "\n\n" .. src
+        end
+    end
+
+    -- 2) Load function
+    if type(loadstring) ~= "function" then
         return "-- BCL: loadstring unavailable.\n-- Fragment:\n" .. extracted
     end
-    local fn = loader(extracted)
+    local fn = loadstring(extracted)
     if not fn then
         return "-- BCL: failed to load. Possibly bytecode or protected.\n-- Fragment:\n" .. extracted
     end
-    local bc, derr = SafeDump(fn)
-    if not bc then
-        return "-- BCL: dump unavailable (" .. tostring(derr) .. ").\n-- Extracted code:\n" .. extracted
+
+    -- 3) Executor's native decompile
+    if type(decompile) == "function" then
+        local ok, src = pcall(decompile, fn)
+        if ok and src and type(src) == "string" and #src > 0 then
+            return "-- BCL: decompiled via executor API.\n-- Size: " .. #src .. " bytes.\n\n" .. src
+        end
+        local bc = SafeDump(fn)
+        if bc then
+            local ok2, src2 = pcall(decompile, bc)
+            if ok2 and src2 and type(src2) == "string" and #src2 > 0 then
+                return "-- BCL: decompiled from bytecode.\n-- Size: " .. #src2 .. " bytes.\n\n" .. src2
+            end
+        end
     end
-    return "-- BCL: bytecode acquired (" .. #bc .. " bytes).\n-- Full decompilation requires external engine.\n\n" .. extracted
+
+    -- 4) getscriptclosure fallback
+    if type(getscriptclosure) == "function" and type(decompile) == "function" then
+        local ok, closure = pcall(getscriptclosure, fn)
+        if ok and closure then
+            local ok2, src = pcall(decompile, closure)
+            if ok2 and src and type(src) == "string" and #src > 0 then
+                return "-- BCL: decompiled via getscriptclosure.\n-- Size: " .. #src .. " bytes.\n\n" .. src
+            end
+        end
+    end
+
+    -- 5) Return bytecode info
+    local bc, derr = SafeDump(fn)
+    if bc then
+        return "-- BCL: decompile API failed, returning bytecode info.\n-- Bytecode: " .. #bc .. " bytes.\n\n" .. extracted
+    end
+    return "-- BCL: dump unavailable (" .. tostring(derr) .. ").\n-- Extracted code:\n" .. extracted
 end
 
 --========================================================
@@ -349,8 +450,8 @@ pcall(function() ScreenGui.Parent = game:GetService("CoreGui") end)
 if not ScreenGui.Parent then ScreenGui.Parent = LP:WaitForChild("PlayerGui") end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 520, 0, 360)
-Main.Position = UDim2.new(0.5, -260, 0.5, -180)
+Main.Size = UDim2.new(0, 540, 0, 380)
+Main.Position = UDim2.new(0.5, -270, 0.5, -190)
 Main.BackgroundColor3 = COLORS.Black
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -359,11 +460,11 @@ Corner(Main, 10)
 local mainStroke = Stroke(Main, COLORS.BrightRed, 1.5)
 Main.Active = true
 Main.Draggable = true
-AnimateIn(Main, UDim2.new(0.5, -260, 0.5, -180), 0.45)
+AnimateIn(Main, UDim2.new(0.5, -270, 0.5, -190), 0.45)
 
--- Title
+-- Title bar
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 34)
+Title.Size = UDim2.new(1, -40, 0, 34)
 Title.BackgroundColor3 = COLORS.DeepRed
 Title.BorderSizePixel = 0
 Title.Text = "  BazCrackLua v" .. CONFIG.Version
@@ -374,9 +475,26 @@ Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = Main
 Gradient(Title, COLORS.DarkRed, COLORS.BrightRed, 0)
 
+-- Close button (unload)
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 40, 0, 34)
+CloseBtn.Position = UDim2.new(1, -40, 0, 0)
+CloseBtn.BackgroundColor3 = COLORS.DeepRed
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = COLORS.Text
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 16
+CloseBtn.Parent = Main
+Gradient(CloseBtn, COLORS.DarkRed, COLORS.BrightRed, 0)
+CloseBtn.MouseButton1Click:Connect(function()
+    _G.BCL_LOADED = false
+    ScreenGui:Destroy()
+    print("[BCL] Unloaded.")
+end)
+
 -- Sidebar
 local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 56, 1, -34)
+Sidebar.Size = UDim2.new(0, 62, 1, -34)
 Sidebar.Position = UDim2.new(0, 0, 0, 34)
 Sidebar.BackgroundColor3 = COLORS.Black
 Sidebar.BorderSizePixel = 0
@@ -388,15 +506,15 @@ local SideButtons = {}
 
 local function MakeSideTab(name, label, idx, iconFn)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -8, 0, 44)
-    btn.Position = UDim2.new(0, 4, 0, 4 + (idx-1)*50)
+    btn.Size = UDim2.new(1, -8, 0, 48)
+    btn.Position = UDim2.new(0, 4, 0, 6 + (idx-1)*54)
     btn.BackgroundColor3 = COLORS.DeepRed
     btn.Text = ""
     btn.Parent = Sidebar
     Corner(btn, 6); Stroke(btn, COLORS.DarkRed, 1)
 
     local ico = iconFn(btn)
-    ico.Position = UDim2.new(0.5, -10, 0, 4)
+    ico.Position = UDim2.new(0.5, -11, 0, 4)
 
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, 0, 0, 12)
@@ -409,8 +527,8 @@ local function MakeSideTab(name, label, idx, iconFn)
     lbl.Parent = btn
 
     local page = Instance.new("Frame")
-    page.Size = UDim2.new(1, -72, 1, -46)
-    page.Position = UDim2.new(0, 64, 0, 42)
+    page.Size = UDim2.new(1, -78, 1, -46)
+    page.Position = UDim2.new(0, 70, 0, 42)
     page.BackgroundTransparency = 1
     page.Visible = false
     page.Parent = Main
@@ -426,17 +544,18 @@ local function MakeSideTab(name, label, idx, iconFn)
     return btn, page
 end
 
-local TabCompile, PageCompile = MakeSideTab("compile", "COMP", 1, Icons.compile)
+local TabCompile, PageCompile = MakeSideTab("compile", "COMP",   1, Icons.compile)
 local TabDecomp,  PageDecomp  = MakeSideTab("decomp",  "DECOMP", 2, Icons.decompile)
 local TabTools,   PageTools   = MakeSideTab("tools",   "TOOLS",  3, Icons.tools)
-local TabInfo,    PageInfo    = MakeSideTab("info",    "INFO",   4, Icons.info)
+local TabTest,    PageTest    = MakeSideTab("test",    "TEST",   4, Icons.test)
+local TabInfo,    PageInfo    = MakeSideTab("info",    "INFO",   5, Icons.info)
 
 --========================================================
 -- COMPILER PAGE
 --========================================================
 local CIn = Instance.new("TextBox")
-CIn.Size = UDim2.new(1, -16, 0, 90)
-CIn.Position = UDim2.new(0, 8, 0, 4)
+CIn.Size = UDim2.new(1, -16, 0, 100)
+CIn.Position = UDim2.new(0, 8, 0, 6)
 CIn.BackgroundColor3 = COLORS.Black
 CIn.TextColor3 = COLORS.Text
 CIn.PlaceholderText = "Enter Lua code..."
@@ -449,10 +568,14 @@ CIn.TextYAlignment = Enum.TextYAlignment.Top
 CIn.ClearTextOnFocus = false
 CIn.Parent = PageCompile
 Corner(CIn, 5); Stroke(CIn, COLORS.Red, 1)
+local CPad = Instance.new("UIPadding")
+CPad.PaddingTop = UDim.new(0, 6); CPad.PaddingBottom = UDim.new(0, 6)
+CPad.PaddingLeft = UDim.new(0, 6); CPad.PaddingRight = UDim.new(0, 6)
+CPad.Parent = CIn
 
 local CBtn = Instance.new("TextButton")
-CBtn.Size = UDim2.new(0, 160, 0, 28)
-CBtn.Position = UDim2.new(0, 8, 0, 100)
+CBtn.Size = UDim2.new(0, 150, 0, 28)
+CBtn.Position = UDim2.new(0, 8, 0, 112)
 CBtn.BackgroundColor3 = COLORS.Red
 CBtn.Text = "COMPILE"
 CBtn.TextColor3 = COLORS.Text
@@ -462,8 +585,8 @@ CBtn.Parent = PageCompile
 Corner(CBtn, 5); Gradient(CBtn, COLORS.DarkRed, COLORS.BrightRed, 0)
 
 local CBtnRun = Instance.new("TextButton")
-CBtnRun.Size = UDim2.new(0, 130, 0, 28)
-CBtnRun.Position = UDim2.new(0, 174, 0, 100)
+CBtnRun.Size = UDim2.new(0, 120, 0, 28)
+CBtnRun.Position = UDim2.new(0, 164, 0, 112)
 CBtnRun.BackgroundColor3 = COLORS.DeepRed
 CBtnRun.Text = "RUN"
 CBtnRun.TextColor3 = COLORS.Text
@@ -472,9 +595,20 @@ CBtnRun.TextSize = 12
 CBtnRun.Parent = PageCompile
 Corner(CBtnRun, 5); Stroke(CBtnRun, COLORS.Red, 1)
 
+local CBtnCopy = Instance.new("TextButton")
+CBtnCopy.Size = UDim2.new(0, 100, 0, 28)
+CBtnCopy.Position = UDim2.new(0, 290, 0, 112)
+CBtnCopy.BackgroundColor3 = COLORS.DeepRed
+CBtnCopy.Text = "COPY"
+CBtnCopy.TextColor3 = COLORS.Text
+CBtnCopy.Font = Enum.Font.GothamBold
+CBtnCopy.TextSize = 12
+CBtnCopy.Parent = PageCompile
+Corner(CBtnCopy, 5); Stroke(CBtnCopy, COLORS.Red, 1)
+
 local COut = Instance.new("TextBox")
-COut.Size = UDim2.new(1, -16, 1, -140)
-COut.Position = UDim2.new(0, 8, 0, 136)
+COut.Size = UDim2.new(1, -16, 1, -154)
+COut.Position = UDim2.new(0, 8, 0, 148)
 COut.BackgroundColor3 = COLORS.Black
 COut.TextColor3 = COLORS.Text
 COut.Font = Enum.Font.Code
@@ -483,9 +617,14 @@ COut.TextWrapped = true
 COut.TextXAlignment = Enum.TextXAlignment.Left
 COut.TextYAlignment = Enum.TextYAlignment.Top
 COut.TextEditable = false
+COut.ClearTextOnFocus = false
 COut.Text = "-- BCL Compiler ready."
 COut.Parent = PageCompile
 Corner(COut, 5); Stroke(COut, COLORS.Red, 1)
+local COutPad = Instance.new("UIPadding")
+COutPad.PaddingTop = UDim.new(0, 6); COutPad.PaddingBottom = UDim.new(0, 6)
+COutPad.PaddingLeft = UDim.new(0, 6); COutPad.PaddingRight = UDim.new(0, 6)
+COutPad.Parent = COut
 
 CBtn.MouseButton1Click:Connect(function()
     local src = CIn.Text
@@ -504,12 +643,21 @@ CBtnRun.MouseButton1Click:Connect(function()
     else COut.Text = "-- Executed. Result: " .. tostring(res) end
 end)
 
+CBtnCopy.MouseButton1Click:Connect(function()
+    if type(setclipboard) == "function" then
+        pcall(setclipboard, COut.Text)
+        COut.Text = COut.Text .. "\n-- Copied."
+    else
+        COut.Text = COut.Text .. "\n-- setclipboard unavailable."
+    end
+end)
+
 --========================================================
 -- DECOMPILER PAGE
 --========================================================
 local DIn = Instance.new("TextBox")
-DIn.Size = UDim2.new(1, -16, 0, 90)
-DIn.Position = UDim2.new(0, 8, 0, 4)
+DIn.Size = UDim2.new(1, -16, 0, 100)
+DIn.Position = UDim2.new(0, 8, 0, 6)
 DIn.BackgroundColor3 = COLORS.Black
 DIn.TextColor3 = COLORS.Text
 DIn.PlaceholderText = 'Paste loadstring("...") or bytecode...'
@@ -522,10 +670,14 @@ DIn.TextYAlignment = Enum.TextYAlignment.Top
 DIn.ClearTextOnFocus = false
 DIn.Parent = PageDecomp
 Corner(DIn, 5); Stroke(DIn, COLORS.Red, 1)
+local DPad = Instance.new("UIPadding")
+DPad.PaddingTop = UDim.new(0, 6); DPad.PaddingBottom = UDim.new(0, 6)
+DPad.PaddingLeft = UDim.new(0, 6); DPad.PaddingRight = UDim.new(0, 6)
+DPad.Parent = DIn
 
 local DBtn = Instance.new("TextButton")
-DBtn.Size = UDim2.new(0, 180, 0, 28)
-DBtn.Position = UDim2.new(0, 8, 0, 100)
+DBtn.Size = UDim2.new(0, 170, 0, 28)
+DBtn.Position = UDim2.new(0, 8, 0, 112)
 DBtn.BackgroundColor3 = COLORS.Red
 DBtn.Text = "DECOMPILE"
 DBtn.TextColor3 = COLORS.Text
@@ -534,9 +686,20 @@ DBtn.TextSize = 12
 DBtn.Parent = PageDecomp
 Corner(DBtn, 5); Gradient(DBtn, COLORS.DarkRed, COLORS.BrightRed, 0)
 
+local DBtnCopy = Instance.new("TextButton")
+DBtnCopy.Size = UDim2.new(0, 100, 0, 28)
+DBtnCopy.Position = UDim2.new(0, 184, 0, 112)
+DBtnCopy.BackgroundColor3 = COLORS.DeepRed
+DBtnCopy.Text = "COPY"
+DBtnCopy.TextColor3 = COLORS.Text
+DBtnCopy.Font = Enum.Font.GothamBold
+DBtnCopy.TextSize = 12
+DBtnCopy.Parent = PageDecomp
+Corner(DBtnCopy, 5); Stroke(DBtnCopy, COLORS.Red, 1)
+
 local DOut = Instance.new("TextBox")
-DOut.Size = UDim2.new(1, -16, 1, -140)
-DOut.Position = UDim2.new(0, 8, 0, 136)
+DOut.Size = UDim2.new(1, -16, 1, -154)
+DOut.Position = UDim2.new(0, 8, 0, 148)
 DOut.BackgroundColor3 = COLORS.Black
 DOut.TextColor3 = COLORS.Text
 DOut.Font = Enum.Font.Code
@@ -545,9 +708,14 @@ DOut.TextWrapped = true
 DOut.TextXAlignment = Enum.TextXAlignment.Left
 DOut.TextYAlignment = Enum.TextYAlignment.Top
 DOut.TextEditable = false
+DOut.ClearTextOnFocus = false
 DOut.Text = "-- BCL Decompiler ready."
 DOut.Parent = PageDecomp
 Corner(DOut, 5); Stroke(DOut, COLORS.Red, 1)
+local DOutPad = Instance.new("UIPadding")
+DOutPad.PaddingTop = UDim.new(0, 6); DOutPad.PaddingBottom = UDim.new(0, 6)
+DOutPad.PaddingLeft = UDim.new(0, 6); DOutPad.PaddingRight = UDim.new(0, 6)
+DOutPad.Parent = DOut
 
 DBtn.MouseButton1Click:Connect(function()
     local code = DIn.Text
@@ -561,12 +729,21 @@ DBtn.MouseButton1Click:Connect(function()
     DOut.Text = Decompiler.Try(code)
 end)
 
+DBtnCopy.MouseButton1Click:Connect(function()
+    if type(setclipboard) == "function" then
+        pcall(setclipboard, DOut.Text)
+        DOut.Text = DOut.Text .. "\n-- Copied."
+    else
+        DOut.Text = DOut.Text .. "\n-- setclipboard unavailable."
+    end
+end)
+
 --========================================================
 -- TOOLS PAGE
 --========================================================
 local TIn = Instance.new("TextBox")
-TIn.Size = UDim2.new(1, -16, 0, 70)
-TIn.Position = UDim2.new(0, 8, 0, 4)
+TIn.Size = UDim2.new(1, -16, 0, 80)
+TIn.Position = UDim2.new(0, 8, 0, 6)
 TIn.BackgroundColor3 = COLORS.Black
 TIn.TextColor3 = COLORS.Text
 TIn.PlaceholderText = "Code to obfuscate..."
@@ -579,10 +756,14 @@ TIn.TextYAlignment = Enum.TextYAlignment.Top
 TIn.ClearTextOnFocus = false
 TIn.Parent = PageTools
 Corner(TIn, 5); Stroke(TIn, COLORS.Red, 1)
+local TPad = Instance.new("UIPadding")
+TPad.PaddingTop = UDim.new(0, 6); TPad.PaddingBottom = UDim.new(0, 6)
+TPad.PaddingLeft = UDim.new(0, 6); TPad.PaddingRight = UDim.new(0, 6)
+TPad.Parent = TIn
 
 local TObf1 = Instance.new("TextButton")
 TObf1.Size = UDim2.new(0, 130, 0, 26)
-TObf1.Position = UDim2.new(0, 8, 0, 80)
+TObf1.Position = UDim2.new(0, 8, 0, 92)
 TObf1.BackgroundColor3 = COLORS.Red
 TObf1.Text = "Obfuscate L1"
 TObf1.TextColor3 = COLORS.Text
@@ -593,7 +774,7 @@ Corner(TObf1, 5); Gradient(TObf1, COLORS.DarkRed, COLORS.BrightRed, 0)
 
 local TObf2 = Instance.new("TextButton")
 TObf2.Size = UDim2.new(0, 130, 0, 26)
-TObf2.Position = UDim2.new(0, 144, 0, 80)
+TObf2.Position = UDim2.new(0, 144, 0, 92)
 TObf2.BackgroundColor3 = COLORS.Red
 TObf2.Text = "Obfuscate L2"
 TObf2.TextColor3 = COLORS.Text
@@ -603,8 +784,8 @@ TObf2.Parent = PageTools
 Corner(TObf2, 5); Gradient(TObf2, COLORS.DarkRed, COLORS.BrightRed, 0)
 
 local TCopy = Instance.new("TextButton")
-TCopy.Size = UDim2.new(0, 130, 0, 26)
-TCopy.Position = UDim2.new(0, 280, 0, 80)
+TCopy.Size = UDim2.new(0, 100, 0, 26)
+TCopy.Position = UDim2.new(0, 280, 0, 92)
 TCopy.BackgroundColor3 = COLORS.DeepRed
 TCopy.Text = "Copy"
 TCopy.TextColor3 = COLORS.Text
@@ -614,8 +795,8 @@ TCopy.Parent = PageTools
 Corner(TCopy, 5); Stroke(TCopy, COLORS.Red, 1)
 
 local TOut = Instance.new("TextBox")
-TOut.Size = UDim2.new(1, -16, 1, -120)
-TOut.Position = UDim2.new(0, 8, 0, 116)
+TOut.Size = UDim2.new(1, -16, 1, -134)
+TOut.Position = UDim2.new(0, 8, 0, 128)
 TOut.BackgroundColor3 = COLORS.Black
 TOut.TextColor3 = COLORS.Text
 TOut.Font = Enum.Font.Code
@@ -624,9 +805,14 @@ TOut.TextWrapped = true
 TOut.TextXAlignment = Enum.TextXAlignment.Left
 TOut.TextYAlignment = Enum.TextYAlignment.Top
 TOut.TextEditable = false
+TOut.ClearTextOnFocus = false
 TOut.Text = "-- BCL Tools ready."
 TOut.Parent = PageTools
 Corner(TOut, 5); Stroke(TOut, COLORS.Red, 1)
+local TOutPad = Instance.new("UIPadding")
+TOutPad.PaddingTop = UDim.new(0, 6); TOutPad.PaddingBottom = UDim.new(0, 6)
+TOutPad.PaddingLeft = UDim.new(0, 6); TOutPad.PaddingRight = UDim.new(0, 6)
+TOutPad.Parent = TOut
 
 TObf1.MouseButton1Click:Connect(function() TOut.Text = Obfuscator.Run(TIn.Text, 1) end)
 TObf2.MouseButton1Click:Connect(function() TOut.Text = Obfuscator.Run(TIn.Text, 2) end)
@@ -640,11 +826,95 @@ TCopy.MouseButton1Click:Connect(function()
 end)
 
 --========================================================
+-- TEST PAGE
+--========================================================
+local TestInfo = Instance.new("TextLabel")
+TestInfo.Size = UDim2.new(1, -16, 0, 40)
+TestInfo.Position = UDim2.new(0, 8, 0, 6)
+TestInfo.BackgroundColor3 = COLORS.Black
+TestInfo.TextColor3 = COLORS.SubText
+TestInfo.Font = Enum.Font.Gotham
+TestInfo.TextSize = 12
+TestInfo.Text = "Load external scripts to test your executor."
+TestInfo.TextXAlignment = Enum.TextXAlignment.Left
+TestInfo.Parent = PageTest
+Corner(TestInfo, 5); Stroke(TestInfo, COLORS.Red, 1)
+local TIPad = Instance.new("UIPadding")
+TIPad.PaddingLeft = UDim.new(0, 8); TIPad.PaddingRight = UDim.new(0, 8)
+TIPad.Parent = TestInfo
+
+local BtnIY = Instance.new("TextButton")
+BtnIY.Size = UDim2.new(1, -16, 0, 32)
+BtnIY.Position = UDim2.new(0, 8, 0, 54)
+BtnIY.BackgroundColor3 = COLORS.Red
+BtnIY.Text = "Load: Infinite Yield"
+BtnIY.TextColor3 = COLORS.Text
+BtnIY.Font = Enum.Font.GothamBold
+BtnIY.TextSize = 13
+BtnIY.Parent = PageTest
+Corner(BtnIY, 5); Gradient(BtnIY, COLORS.DarkRed, COLORS.BrightRed, 0)
+
+local BtnUNC = Instance.new("TextButton")
+BtnUNC.Size = UDim2.new(1, -16, 0, 32)
+BtnUNC.Position = UDim2.new(0, 8, 0, 92)
+BtnUNC.BackgroundColor3 = COLORS.Red
+BtnUNC.Text = "Load: UNC Test"
+BtnUNC.TextColor3 = COLORS.Text
+BtnUNC.Font = Enum.Font.GothamBold
+BtnUNC.TextSize = 13
+BtnUNC.Parent = PageTest
+Corner(BtnUNC, 5); Gradient(BtnUNC, COLORS.DarkRed, COLORS.BrightRed, 0)
+
+local TestOut = Instance.new("TextBox")
+TestOut.Size = UDim2.new(1, -16, 1, -146)
+TestOut.Position = UDim2.new(0, 8, 0, 140)
+TestOut.BackgroundColor3 = COLORS.Black
+TestOut.TextColor3 = COLORS.Text
+TestOut.Font = Enum.Font.Code
+TestOut.TextSize = 11
+TestOut.TextWrapped = true
+TestOut.TextXAlignment = Enum.TextXAlignment.Left
+TestOut.TextYAlignment = Enum.TextYAlignment.Top
+TestOut.TextEditable = false
+TestOut.ClearTextOnFocus = false
+TestOut.Text = "-- Test results will appear here."
+TestOut.Parent = PageTest
+Corner(TestOut, 5); Stroke(TestOut, COLORS.Red, 1)
+local TOPad = Instance.new("UIPadding")
+TOPad.PaddingTop = UDim.new(0, 6); TOPad.PaddingBottom = UDim.new(0, 6)
+TOPad.PaddingLeft = UDim.new(0, 6); TOPad.PaddingRight = UDim.new(0, 6)
+TOPad.Parent = TestOut
+
+BtnIY.MouseButton1Click:Connect(function()
+    TestOut.Text = "-- Loading Infinite Yield...\n"
+    local ok, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+    end)
+    if ok then
+        TestOut.Text = TestOut.Text .. "-- Infinite Yield loaded successfully."
+    else
+        TestOut.Text = TestOut.Text .. "-- Failed: " .. tostring(err)
+    end
+end)
+
+BtnUNC.MouseButton1Click:Connect(function()
+    TestOut.Text = "-- Loading UNC test...\n"
+    local ok, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/unified-naming-convention/NamingStandard/main/UNCCheckEnv.lua"))()
+    end)
+    if ok then
+        TestOut.Text = TestOut.Text .. "-- UNC test loaded successfully."
+    else
+        TestOut.Text = TestOut.Text .. "-- Failed: " .. tostring(err)
+    end
+end)
+
+--========================================================
 -- INFO PAGE
 --========================================================
 local ProfileCard = Instance.new("Frame")
 ProfileCard.Size = UDim2.new(1, 0, 0, 80)
-ProfileCard.Position = UDim2.new(0, 0, 0, 0)
+ProfileCard.Position = UDim2.new(0, 0, 0, 6)
 ProfileCard.BackgroundColor3 = COLORS.Black
 ProfileCard.BorderSizePixel = 0
 ProfileCard.Parent = PageInfo
@@ -700,7 +970,7 @@ PId.Parent = ProfileCard
 
 local ExecCard = Instance.new("Frame")
 ExecCard.Size = UDim2.new(1, 0, 0, 32)
-ExecCard.Position = UDim2.new(0, 0, 0, 86)
+ExecCard.Position = UDim2.new(0, 0, 0, 92)
 ExecCard.BackgroundColor3 = COLORS.Black
 ExecCard.BorderSizePixel = 0
 ExecCard.Parent = PageInfo
@@ -719,7 +989,7 @@ ExecLabel.Parent = ExecCard
 
 local FuncCard = Instance.new("Frame")
 FuncCard.Size = UDim2.new(1, 0, 0, 66)
-FuncCard.Position = UDim2.new(0, 0, 0, 124)
+FuncCard.Position = UDim2.new(0, 0, 0, 130)
 FuncCard.BackgroundColor3 = COLORS.Black
 FuncCard.BorderSizePixel = 0
 FuncCard.Parent = PageInfo
@@ -765,7 +1035,7 @@ GradeLabel.Parent = FuncCard
 
 local Uptime = Instance.new("TextLabel")
 Uptime.Size = UDim2.new(1, -16, 0, 16)
-Uptime.Position = UDim2.new(0, 0, 0, 194)
+Uptime.Position = UDim2.new(0, 0, 0, 200)
 Uptime.BackgroundTransparency = 1
 Uptime.Text = "Session: 00:00"
 Uptime.TextColor3 = COLORS.SubText
