@@ -1,10 +1,16 @@
 --[[
     BazCrackLua (BCL)
-    Version: 1.0.6
+    Version: 1.1.0
     Changelog:
-      - v1.0.6: Download Place fixed (filter system scripts, fallback chain, skip counter)
-      - v1.0.6: Hide button (—) next to X, minimizes the GUI to a small icon
-      - v1.0.6: minor fixes
+      - v1.1.0: MAJOR — Objects/sec slider (1-500) in TOOLS
+      - v1.1.0: Stop button for Download Place
+      - v1.1.0: rate-limited scan (no more mobile crashes)
+      - v1.1.0: streaming file output (appendfile), no memory spike
+      - v1.1.0: mobile auto-detection (lower default limits)
+      - v1.1.0: service filter + name dedupe for Download Place
+      - v1.1.0: progress bar for scan
+      - v1.1.0: hide button (—), toasts above panel
+      - v1.1.0: UI polish, button alignment
 --]]
 
 if _G.BCL_LOADED then
@@ -14,7 +20,7 @@ end
 _G.BCL_LOADED = true
 
 local CONFIG = {
-    Version    = "1.0.6",
+    Version    = "1.1.0",
     Discord    = "https://discord.gg/vVFeyntpa",
     GithubRaw  = "https://raw.githubusercontent.com/tralilitosmaster-art/BazCrackLua-/main/main.lua",
     UpdatePoll = 30,
@@ -35,7 +41,17 @@ local COLORS = {
     DiscordLight  = Color3.fromRGB(114, 137, 218),
 }
 
-local STATE = { StartTime = os.time(), History = {}, LastHash = nil }
+local UIS = game:GetService("UserInputService")
+local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
+
+local STATE = {
+    StartTime       = os.time(),
+    History         = {},
+    LastHash        = nil,
+    Speed           = isMobile and 50 or 200,
+    DownloadStop    = false,
+    DownloadRunning = false,
+}
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -282,6 +298,7 @@ local function CountFunctions()
         "getscriptbytecode","getcustomasset","mousemoverel","mouse1click",
         "keypress","keyrelease","decompile","dumpstring","gethui","protectgui",
         "cloneref","compareinstances","getscriptclosure","getscripthash",
+        "appendfile","writefile","readfile",
     }
     local loaded, total = 0, #checks
     local missing = {}
@@ -416,7 +433,7 @@ function Beautifier.Format(src)
             indent = math.max(0, indent - 1)
         end
         table.insert(out, string.rep(indentStr, indent) .. trimmed)
-        if trimmed:match("then$") or trimmed:match("do$") or trimmed:match("else$")
+        if trimmed:match("then$") or trimmed:match("do$") or trimmed:match("^else$")
            or trimmed:match("function.*%)$") or trimmed:match("{$") or trimmed:match("%($") then
             indent = indent + 1
         end
@@ -456,69 +473,89 @@ function AntiLuarmor.Detect(code)
 end
 
 --========================================================
--- SAVEINSTANCE (Download Place) — fixed
+-- SAVEINSTANCE — rate-limited, streaming (v1.1.0)
 --========================================================
 local SaveInstance = {}
-function SaveInstance.Save(progressCb)
-    local out, total, processed, skipped = {}, 0, 0, 0
-    local seen = {}
-    local blacklist = {
+SaveInstance._buf = nil
+
+local function isBlacklisted(name)
+    local bl = {
         "LockCFScript", "LockPropertiesScript", "DelayShutDown",
         "Animate", "Health", "Sound", "Animator", "ChatScript",
         "HealthScript", "SoundScript", "PlayerScriptsLoader",
     }
+    for _, b in ipairs(bl) do if name == b then return true end end
+    return false
+end
+
+local function tryGetSource(obj)
+    local ok, src = pcall(function() return obj.Source end)
+    if ok and src and type(src) == "string" and #src > 0 then return src end
+
+    if type(getscriptbytecode) == "function" and type(decompile) == "function" then
+        local ok2, bc = pcall(getscriptbytecode, obj)
+        if ok2 and bc and type(bc) == "string" and #bc > 0 then
+            local ok3, s = pcall(decompile, bc)
+            if ok3 and s and type(s) == "string" and #s > 0 then return s end
+        end
+    end
+
+    if type(getscriptclosure) == "function" and type(decompile) == "function" then
+        local ok2, c = pcall(getscriptclosure, obj)
+        if ok2 and c then
+            local ok3, s = pcall(decompile, c)
+            if ok3 and s and type(s) == "string" and #s > 0 then return s end
+        end
+    end
+    return nil
+end
+
+local function writeChunk(str)
+    if type(appendfile) == "function" then
+        pcall(appendfile, "BCL_SaveInstance.lua", str)
+    elseif type(writefile) == "function" then
+        SaveInstance._buf = (SaveInstance._buf or "") .. str
+        if #SaveInstance._buf > 50000 then
+            pcall(writefile, "BCL_SaveInstance.lua", SaveInstance._buf)
+            SaveInstance._buf = ""
+        end
+    end
+end
+
+function SaveInstance.Save(progressCb)
+    local speed = math.clamp(STATE.Speed or 100, 1, 500)
+    local out_count, skipped, processed = 0, 0, 0
+    local seen_names = {}
+
+    if type(writefile) == "function" then
+        pcall(writefile, "BCL_SaveInstance.lua", "-- BCL Download Place dump\n")
+    end
+    SaveInstance._buf = ""
 
     local descendants = game:GetDescendants()
-    total = #descendants
+    local total = #descendants
 
-    local function isBlacklisted(name)
-        for _, b in ipairs(blacklist) do
-            if name == b then return true end
-        end
-        return false
-    end
-
-    local function tryGetSource(obj)
-        -- 1) Direct Source
-        local ok, src = pcall(function() return obj.Source end)
-        if ok and src and type(src) == "string" and #src > 0 then return src end
-
-        -- 2) getscriptbytecode -> decompile
-        if type(getscriptbytecode) == "function" and type(decompile) == "function" then
-            local ok2, bc = pcall(getscriptbytecode, obj)
-            if ok2 and bc and type(bc) == "string" and #bc > 0 then
-                local ok3, src2 = pcall(decompile, bc)
-                if ok3 and src2 and type(src2) == "string" and #src2 > 0 then
-                    return src2
-                end
-            end
-        end
-
-        -- 3) getscriptclosure -> decompile
-        if type(getscriptclosure) == "function" and type(decompile) == "function" then
-            local ok2, closure = pcall(getscriptclosure, obj)
-            if ok2 and closure then
-                local ok3, src3 = pcall(decompile, closure)
-                if ok3 and src3 and type(src3) == "string" and #src3 > 0 then
-                    return src3
-                end
-            end
-        end
-
-        return nil
-    end
+    -- rate control: скорость в объектах в секунду
+    local tickWindow = 0.1        -- 100 мс окно
+    local objPerWindow = speed / 10
+    local windowStart = tick()
+    local windowCount = 0
 
     for _, obj in ipairs(descendants) do
+        if STATE.DownloadStop then break end
+
         processed = processed + 1
+        windowCount = windowCount + 1
+
         if obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
-            if not isBlacklisted(obj.Name) and not seen[obj] then
-                seen[obj] = true
+            local fullName = obj:GetFullName()
+            if not isBlacklisted(obj.Name) and not seen_names[fullName] then
+                seen_names[fullName] = true
                 local src = tryGetSource(obj)
                 if src and #src > 0 then
-                    table.insert(out, string.format(
-                        "-- [%s] %s\n-- Size: %d bytes\n%s\n",
-                        obj.ClassName, obj:GetFullName(), #src, src
-                    ))
+                    out_count = out_count + 1
+                    writeChunk(string.format("\n-- [%s] %s\n-- Size: %d bytes\n%s\n",
+                        obj.ClassName, fullName, #src, src))
                 else
                     skipped = skipped + 1
                 end
@@ -526,20 +563,34 @@ function SaveInstance.Save(progressCb)
                 skipped = skipped + 1
             end
         end
-        if progressCb and processed % 500 == 0 then
-            pcall(progressCb, processed, total)
+
+        -- rate limit
+        local elapsed = tick() - windowStart
+        if elapsed >= tickWindow then
+            if windowCount > objPerWindow then
+                local waitTime = elapsed * ((windowCount / objPerWindow) - 1)
+                if waitTime > 0 and waitTime < 1 then
+                    task.wait(waitTime)
+                end
+            end
+            windowStart = tick()
+            windowCount = 0
+            if progressCb then pcall(progressCb, processed, total, out_count, skipped) end
             task.wait()
         end
     end
 
-    local result = string.format(
-        "-- BCL Download Place dump\n-- Objects scanned: %d\n-- Scripts with source: %d\n-- Skipped (empty/system): %d\n\n%s",
-        total, #out, skipped, table.concat(out, "\n\n")
-    )
-    if type(writefile) == "function" then
-        pcall(writefile, "BCL_SaveInstance.lua", result)
+    -- flush
+    if SaveInstance._buf and #SaveInstance._buf > 0 and type(writefile) == "function" then
+        if type(appendfile) == "function" then
+            pcall(appendfile, "BCL_SaveInstance.lua", SaveInstance._buf)
+        else
+            pcall(writefile, "BCL_SaveInstance.lua", SaveInstance._buf)
+        end
+        SaveInstance._buf = nil
     end
-    return result, #out, skipped
+
+    return out_count, skipped, processed, total
 end
 
 --========================================================
@@ -578,8 +629,8 @@ ToastHolder.ZIndex = 100
 ToastHolder.Parent = ScreenGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 560, 0, 400)
-Main.Position = UDim2.new(0.5, -280, 0.5, -200)
+Main.Size = UDim2.new(0, 560, 0, 420)
+Main.Position = UDim2.new(0.5, -280, 0.5, -210)
 Main.BackgroundColor3 = COLORS.Black
 Main.BorderSizePixel = 0
 Main.ZIndex = 1
@@ -589,9 +640,8 @@ Corner(Main, 10)
 local mainStroke = Stroke(Main, COLORS.BrightRed, 1.5)
 Main.Active = true
 Main.Draggable = true
-AnimateIn(Main, UDim2.new(0.5, -280, 0.5, -200), 0.45)
+AnimateIn(Main, UDim2.new(0.5, -280, 0.5, -210), 0.45)
 
--- Minimized icon (hidden by default)
 local MiniIcon = Instance.new("TextButton")
 MiniIcon.Size = UDim2.new(0, 50, 0, 50)
 MiniIcon.Position = UDim2.new(0, 20, 0, 20)
@@ -619,7 +669,6 @@ Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = Main
 Gradient(Title, COLORS.DarkRed, COLORS.BrightRed, 0)
 
--- Hide button
 local HideBtn = Instance.new("TextButton")
 HideBtn.Size = UDim2.new(0, 40, 0, 34)
 HideBtn.Position = UDim2.new(1, -80, 0, 0)
@@ -636,7 +685,6 @@ HideBtn.MouseButton1Click:Connect(function()
     Main.Visible = false
     MiniIcon.Visible = true
 end)
-
 MiniIcon.MouseButton1Click:Connect(function()
     Main.Visible = true
     MiniIcon.Visible = false
@@ -815,7 +863,7 @@ DiscordBtn.MouseButton1Click:Connect(function()
 end)
 
 --========================================================
--- Button row helper
+-- BtnRow helper
 --========================================================
 local function BtnRow(parent, y, defs)
     local out = {}
@@ -979,7 +1027,7 @@ end)
 -- TOOLS PAGE
 --========================================================
 local TIn = Instance.new("TextBox")
-TIn.Size = UDim2.new(1, -16, 0, 70); TIn.Position = UDim2.new(0, 8, 0, 6)
+TIn.Size = UDim2.new(1, -16, 0, 60); TIn.Position = UDim2.new(0, 8, 0, 6)
 TIn.BackgroundColor3 = COLORS.Black; TIn.TextColor3 = COLORS.Text
 TIn.PlaceholderText = "Code to obfuscate..."
 TIn.PlaceholderColor3 = COLORS.SubText
@@ -991,35 +1039,116 @@ TIn.ClearTextOnFocus = false; TIn.ZIndex = 3; TIn.Parent = PageTools
 Corner(TIn, 5); Stroke(TIn, COLORS.Red, 1); Pad(TIn, 6)
 
 local TObf1 = Instance.new("TextButton")
-TObf1.Size = UDim2.new(0, 140, 0, 28); TObf1.Position = UDim2.new(0, 8, 0, 82)
+TObf1.Size = UDim2.new(0, 140, 0, 28); TObf1.Position = UDim2.new(0, 8, 0, 72)
 TObf1.BackgroundColor3 = COLORS.Red; TObf1.Text = "Obfuscate L1"
 TObf1.TextColor3 = COLORS.Text; TObf1.Font = Enum.Font.GothamBold
 TObf1.TextSize = 11; TObf1.ZIndex = 3; TObf1.Parent = PageTools
 Corner(TObf1, 5); Gradient(TObf1, COLORS.DarkRed, COLORS.BrightRed, 0)
 
 local TObf2 = Instance.new("TextButton")
-TObf2.Size = UDim2.new(0, 140, 0, 28); TObf2.Position = UDim2.new(0, 154, 0, 82)
+TObf2.Size = UDim2.new(0, 140, 0, 28); TObf2.Position = UDim2.new(0, 154, 0, 72)
 TObf2.BackgroundColor3 = COLORS.Red; TObf2.Text = "Obfuscate L2"
 TObf2.TextColor3 = COLORS.Text; TObf2.Font = Enum.Font.GothamBold
 TObf2.TextSize = 11; TObf2.ZIndex = 3; TObf2.Parent = PageTools
 Corner(TObf2, 5); Gradient(TObf2, COLORS.DarkRed, COLORS.BrightRed, 0)
 
+-- Download Place button
 local TDownload = Instance.new("TextButton")
-TDownload.Size = UDim2.new(1, -16, 0, 32); TDownload.Position = UDim2.new(0, 8, 0, 116)
+TDownload.Size = UDim2.new(1, -16, 0, 32); TDownload.Position = UDim2.new(0, 8, 0, 106)
 TDownload.BackgroundColor3 = COLORS.Red; TDownload.Text = "Download Place"
 TDownload.TextColor3 = COLORS.Text; TDownload.Font = Enum.Font.GothamBold
 TDownload.TextSize = 13; TDownload.ZIndex = 3; TDownload.Parent = PageTools
 Corner(TDownload, 5); Gradient(TDownload, COLORS.DarkRed, COLORS.BrightRed, 0)
 Hover(TDownload, COLORS.Red, COLORS.BrightRed)
 
-local TButtons = BtnRow(PageTools, 154, {
+-- ===== SPEED SLIDER (Objects/sec, 1-500) =====
+local SpeedLabel = Instance.new("TextLabel")
+SpeedLabel.Size = UDim2.new(0, 160, 0, 26)
+SpeedLabel.Position = UDim2.new(0, 8, 0, 144)
+SpeedLabel.BackgroundColor3 = COLORS.Black
+SpeedLabel.Text = "Objects/sec: " .. STATE.Speed
+SpeedLabel.TextColor3 = COLORS.Text
+SpeedLabel.Font = Enum.Font.Gotham
+SpeedLabel.TextSize = 12
+SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpeedLabel.ZIndex = 3
+SpeedLabel.Parent = PageTools
+Corner(SpeedLabel, 5); Stroke(SpeedLabel, COLORS.Red, 1)
+local spdPad = Instance.new("UIPadding")
+spdPad.PaddingLeft = UDim.new(0, 6); spdPad.Parent = SpeedLabel
+
+local SpeedSliderBg = Instance.new("Frame")
+SpeedSliderBg.Size = UDim2.new(0, 250, 0, 8)
+SpeedSliderBg.Position = UDim2.new(0, 176, 0, 153)
+SpeedSliderBg.BackgroundColor3 = COLORS.DeepRed
+SpeedSliderBg.BorderSizePixel = 0
+SpeedSliderBg.ZIndex = 3
+SpeedSliderBg.Parent = PageTools
+Corner(SpeedSliderBg, 4)
+
+local SpeedFill = Instance.new("Frame")
+SpeedFill.Size = UDim2.new(STATE.Speed / 500, 0, 1, 0)
+SpeedFill.BackgroundColor3 = COLORS.BrightRed
+SpeedFill.BorderSizePixel = 0
+SpeedFill.ZIndex = 4
+SpeedFill.Parent = SpeedSliderBg
+Corner(SpeedFill, 4)
+Gradient(SpeedFill, COLORS.Red, COLORS.BrightRed, 0)
+
+local SpeedKnob = Instance.new("TextButton")
+SpeedKnob.Size = UDim2.new(0, 18, 0, 18)
+SpeedKnob.Position = UDim2.new(STATE.Speed / 500, -9, 0.5, -9)
+SpeedKnob.BackgroundColor3 = COLORS.BrightRed
+SpeedKnob.Text = ""
+SpeedKnob.ZIndex = 5
+SpeedKnob.Parent = SpeedSliderBg
+Corner(SpeedKnob, 9); Stroke(SpeedKnob, COLORS.Text, 1.5)
+
+local dragging = false
+local function setSpeed(value)
+    value = math.clamp(math.floor(value), 1, 500)
+    STATE.Speed = value
+    SpeedLabel.Text = "Objects/sec: " .. value
+    local pct = value / 500
+    SpeedFill.Size = UDim2.new(pct, 0, 1, 0)
+    SpeedKnob.Position = UDim2.new(pct, -9, 0.5, -9)
+end
+local function updateFromInput(input)
+    local relX = input.Position.X - SpeedSliderBg.AbsolutePosition.X
+    local pct = math.clamp(relX / SpeedSliderBg.AbsoluteSize.X, 0, 1)
+    setSpeed(pct * 500)
+end
+SpeedSliderBg.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+       or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        updateFromInput(input)
+    end
+end)
+SpeedSliderBg.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+       or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+UIS.InputChanged:Connect(function(input)
+    if dragging then
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+           or input.UserInputType == Enum.UserInputType.Touch then
+            updateFromInput(input)
+        end
+    end
+end)
+
+-- Buttons row below speed
+local TButtons = BtnRow(PageTools, 178, {
     {key="copy",  text="COPY"},
     {key="clear", text="CLEAR"},
     {key="save",  text="SAVE"},
 })
 
 local TOut = Instance.new("TextBox")
-TOut.Size = UDim2.new(1, -16, 1, -196); TOut.Position = UDim2.new(0, 8, 0, 190)
+TOut.Size = UDim2.new(1, -16, 1, -220); TOut.Position = UDim2.new(0, 8, 0, 214)
 TOut.BackgroundColor3 = COLORS.Black; TOut.TextColor3 = COLORS.Text
 TOut.Font = Enum.Font.Code; TOut.TextSize = 11
 TOut.TextWrapped = true
@@ -1039,21 +1168,40 @@ TObf2.MouseButton1Click:Connect(function()
 end)
 
 TDownload.MouseButton1Click:Connect(function()
-    TOut.Text = "-- Download Place: scanning...\n"
-    Notify("Download Place started", COLORS.Yellow)
-    local ok, result, count, skipped = pcall(function()
-        return SaveInstance.Save(function(p, t)
-            TOut.Text = string.format("-- Download Place: %d / %d", p, t)
+    if STATE.DownloadRunning then
+        STATE.DownloadStop = true
+        Notify("Stopping...", COLORS.Yellow)
+        return
+    end
+
+    STATE.DownloadRunning = true
+    STATE.DownloadStop = false
+    TDownload.Text = "Stop"
+    TDownload.BackgroundColor3 = COLORS.DeepRed
+
+    TOut.Text = string.format("-- Download Place: scanning at %d obj/s...\n", STATE.Speed)
+    Notify(string.format("Download started (%d obj/s)", STATE.Speed), COLORS.Yellow)
+
+    local ok, count, skipped, processed, total = pcall(function()
+        return SaveInstance.Save(function(p, t, c, s)
+            TOut.Text = string.format("-- Scanning: %d / %d | found: %d | skipped: %d | speed: %d obj/s",
+                p, t, c, s, STATE.Speed)
         end)
     end)
-    if ok and result then
+
+    STATE.DownloadRunning = false
+    STATE.DownloadStop = false
+    TDownload.Text = "Download Place"
+    TDownload.BackgroundColor3 = COLORS.Red
+
+    if ok then
         TOut.Text = string.format(
-            "-- Download Place complete.\n-- Scripts with source: %d\n-- Skipped: %d\n-- Saved to: BCL_SaveInstance.lua\n\n%s",
-            count, skipped, result:sub(1, 3000)
+            "-- Download Place complete.\n-- Scanned: %d / %d\n-- Scripts with source: %d\n-- Skipped: %d\n-- Speed: %d obj/s\n-- Saved to: BCL_SaveInstance.lua",
+            processed, total, count, skipped, STATE.Speed
         )
         Notify("Downloaded: " .. tostring(count) .. " scripts", COLORS.Green)
     else
-        TOut.Text = "-- Download Place failed: " .. tostring(result)
+        TOut.Text = "-- Download Place failed: " .. tostring(count)
         Notify("Download failed", COLORS.BrightRed)
     end
 end)
@@ -1232,7 +1380,7 @@ end)
 local function RefreshInfo()
     local name, display, userId, avatar = GetPlayerProfile()
     PName.Text = display .. " (@" .. name .. ")"
-    PSub.Text = "UserId: " .. tostring(userId)
+    PSub.Text = "UserId: " .. tostring(userId) .. (isMobile and " • Mobile" or " • PC")
     PId.Text = "BCL v" .. CONFIG.Version .. " • Status: active"
     PId.TextColor3 = COLORS.Green
     if avatar then BigAvatar.Image = avatar; BGL.Text = ""
@@ -1284,4 +1432,4 @@ task.spawn(function()
     end
 end)
 
-print("[BCL] v" .. CONFIG.Version .. " loaded.")
+print("[BCL] v" .. CONFIG.Version .. " loaded. Mobile:", isMobile, "| Speed:", STATE.Speed)
