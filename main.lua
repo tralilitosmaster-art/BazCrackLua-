@@ -1,11 +1,10 @@
 --[[
     BazCrackLua (BCL)
-    Version: 1.0.5
+    Version: 1.0.6
     Changelog:
-      - v1.0.5: GUI alignment polish
-      - v1.0.5: toast notifications now render ABOVE the panel (ZIndex)
-      - v1.0.5: SaveInstance moved to TOOLS, renamed to "Download Place"
-      - v1.0.5: minor fixes
+      - v1.0.6: Download Place fixed (filter system scripts, fallback chain, skip counter)
+      - v1.0.6: Hide button (—) next to X, minimizes the GUI to a small icon
+      - v1.0.6: minor fixes
 --]]
 
 if _G.BCL_LOADED then
@@ -15,7 +14,7 @@ end
 _G.BCL_LOADED = true
 
 local CONFIG = {
-    Version    = "1.0.5",
+    Version    = "1.0.6",
     Discord    = "https://discord.gg/vVFeyntpa",
     GithubRaw  = "https://raw.githubusercontent.com/tralilitosmaster-art/BazCrackLua-/main/main.lua",
     UpdatePoll = 30,
@@ -134,10 +133,8 @@ end
 
 Icons.home = function(parent)
     local f = IconBase(parent)
-    local r1 = Bar(f, UDim2.new(0, 14, 0, 3), UDim2.new(0.2, 0, 0.3, 0))
-    r1.Rotation = 45
-    local r2 = Bar(f, UDim2.new(0, 14, 0, 3), UDim2.new(0.2, 0, 0.3, 0))
-    r2.Rotation = -45
+    local r1 = Bar(f, UDim2.new(0, 14, 0, 3), UDim2.new(0.2, 0, 0.3, 0)); r1.Rotation = 45
+    local r2 = Bar(f, UDim2.new(0, 14, 0, 3), UDim2.new(0.2, 0, 0.3, 0)); r2.Rotation = -45
     r2.Position = UDim2.new(0.5, 0, 0.3, 0)
     Bar(f, UDim2.new(0, 14, 0, 12), UDim2.new(0.18, 0, 0.55, 0))
     return f
@@ -187,7 +184,7 @@ Icons.info = function(parent)
 end
 
 --========================================================
--- TOAST NOTIFICATIONS (above panel)
+-- TOASTS
 --========================================================
 local ToastHolder
 local function Notify(msg, color)
@@ -204,28 +201,17 @@ local function Notify(msg, color)
     Gradient(toast, COLORS.Black, COLORS.DeepRed, 90)
 
     local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -12, 1, 0)
-    lbl.Position = UDim2.new(0, 6, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.ZIndex = 101
-    lbl.Text = msg
-    lbl.TextColor3 = COLORS.Text
-    lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 12
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.TextWrapped = true
+    lbl.Size = UDim2.new(1, -12, 1, 0); lbl.Position = UDim2.new(0, 6, 0, 0)
+    lbl.BackgroundTransparency = 1; lbl.ZIndex = 101
+    lbl.Text = msg; lbl.TextColor3 = COLORS.Text
+    lbl.Font = Enum.Font.Gotham; lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.TextWrapped = true
     lbl.Parent = toast
 
     task.spawn(function()
-        for i = 0, 10 do
-            toast.BackgroundTransparency = 1 - (i/10)
-            task.wait(0.02)
-        end
+        for i = 0, 10 do toast.BackgroundTransparency = 1 - (i/10); task.wait(0.02) end
         task.wait(2.5)
-        for i = 0, 10 do
-            toast.BackgroundTransparency = (i/10)
-            task.wait(0.02)
-        end
+        for i = 0, 10 do toast.BackgroundTransparency = (i/10); task.wait(0.02) end
         toast:Destroy()
     end)
 end
@@ -470,45 +456,90 @@ function AntiLuarmor.Detect(code)
 end
 
 --========================================================
--- SAVEINSTANCE (Download Place)
+-- SAVEINSTANCE (Download Place) — fixed
 --========================================================
 local SaveInstance = {}
 function SaveInstance.Save(progressCb)
-    local out, total, processed = {}, 0, 0
-    for _, _ in ipairs(game:GetDescendants()) do total = total + 1 end
+    local out, total, processed, skipped = {}, 0, 0, 0
+    local seen = {}
+    local blacklist = {
+        "LockCFScript", "LockPropertiesScript", "DelayShutDown",
+        "Animate", "Health", "Sound", "Animator", "ChatScript",
+        "HealthScript", "SoundScript", "PlayerScriptsLoader",
+    }
 
-    local function serialize(obj)
-        if obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
-            local ok, src = pcall(function() return obj.Source end)
-            if not ok then
-                if type(decompile) == "function" and type(getscriptclosure) == "function" then
-                    local ok2, closure = pcall(getscriptclosure, obj)
-                    if ok2 and closure then
-                        local ok3, s = pcall(decompile, closure)
-                        if ok3 then src = s end
-                    end
-                end
-            end
-            if src then
-                table.insert(out, string.format("-- [%s] %s\n%s\n", obj.ClassName, obj:GetFullName(), src))
-            end
+    local descendants = game:GetDescendants()
+    total = #descendants
+
+    local function isBlacklisted(name)
+        for _, b in ipairs(blacklist) do
+            if name == b then return true end
         end
+        return false
     end
 
-    for _, obj in ipairs(game:GetDescendants()) do
+    local function tryGetSource(obj)
+        -- 1) Direct Source
+        local ok, src = pcall(function() return obj.Source end)
+        if ok and src and type(src) == "string" and #src > 0 then return src end
+
+        -- 2) getscriptbytecode -> decompile
+        if type(getscriptbytecode) == "function" and type(decompile) == "function" then
+            local ok2, bc = pcall(getscriptbytecode, obj)
+            if ok2 and bc and type(bc) == "string" and #bc > 0 then
+                local ok3, src2 = pcall(decompile, bc)
+                if ok3 and src2 and type(src2) == "string" and #src2 > 0 then
+                    return src2
+                end
+            end
+        end
+
+        -- 3) getscriptclosure -> decompile
+        if type(getscriptclosure) == "function" and type(decompile) == "function" then
+            local ok2, closure = pcall(getscriptclosure, obj)
+            if ok2 and closure then
+                local ok3, src3 = pcall(decompile, closure)
+                if ok3 and src3 and type(src3) == "string" and #src3 > 0 then
+                    return src3
+                end
+            end
+        end
+
+        return nil
+    end
+
+    for _, obj in ipairs(descendants) do
         processed = processed + 1
-        serialize(obj)
-        if progressCb and processed % 200 == 0 then
+        if obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+            if not isBlacklisted(obj.Name) and not seen[obj] then
+                seen[obj] = true
+                local src = tryGetSource(obj)
+                if src and #src > 0 then
+                    table.insert(out, string.format(
+                        "-- [%s] %s\n-- Size: %d bytes\n%s\n",
+                        obj.ClassName, obj:GetFullName(), #src, src
+                    ))
+                else
+                    skipped = skipped + 1
+                end
+            else
+                skipped = skipped + 1
+            end
+        end
+        if progressCb and processed % 500 == 0 then
             pcall(progressCb, processed, total)
             task.wait()
         end
     end
 
-    local result = "-- BCL Download Place dump\n-- Objects: " .. total .. "\n-- Scripts: " .. #out .. "\n\n" .. table.concat(out, "\n\n")
+    local result = string.format(
+        "-- BCL Download Place dump\n-- Objects scanned: %d\n-- Scripts with source: %d\n-- Skipped (empty/system): %d\n\n%s",
+        total, #out, skipped, table.concat(out, "\n\n")
+    )
     if type(writefile) == "function" then
         pcall(writefile, "BCL_SaveInstance.lua", result)
     end
-    return result, #out
+    return result, #out, skipped
 end
 
 --========================================================
@@ -539,7 +570,6 @@ ScreenGui.DisplayOrder = 9999
 pcall(function() ScreenGui.Parent = game:GetService("CoreGui") end)
 if not ScreenGui.Parent then ScreenGui.Parent = LP:WaitForChild("PlayerGui") end
 
--- Toasts first, so they render above (DisplayOrder + ZIndex)
 ToastHolder = Instance.new("Frame")
 ToastHolder.Size = UDim2.new(0, 280, 1, 0)
 ToastHolder.Position = UDim2.new(1, -290, 0, 0)
@@ -561,8 +591,23 @@ Main.Active = true
 Main.Draggable = true
 AnimateIn(Main, UDim2.new(0.5, -280, 0.5, -200), 0.45)
 
+-- Minimized icon (hidden by default)
+local MiniIcon = Instance.new("TextButton")
+MiniIcon.Size = UDim2.new(0, 50, 0, 50)
+MiniIcon.Position = UDim2.new(0, 20, 0, 20)
+MiniIcon.BackgroundColor3 = COLORS.DeepRed
+MiniIcon.Text = "BCL"
+MiniIcon.TextColor3 = COLORS.Text
+MiniIcon.Font = Enum.Font.GothamBold
+MiniIcon.TextSize = 13
+MiniIcon.Visible = false
+MiniIcon.ZIndex = 200
+MiniIcon.Parent = ScreenGui
+Corner(MiniIcon, 25); Stroke(MiniIcon, COLORS.BrightRed, 2)
+Gradient(MiniIcon, COLORS.DarkRed, COLORS.BrightRed, 45)
+
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -40, 0, 34)
+Title.Size = UDim2.new(1, -80, 0, 34)
 Title.BackgroundColor3 = COLORS.DeepRed
 Title.BorderSizePixel = 0
 Title.ZIndex = 2
@@ -573,6 +618,29 @@ Title.TextSize = 15
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = Main
 Gradient(Title, COLORS.DarkRed, COLORS.BrightRed, 0)
+
+-- Hide button
+local HideBtn = Instance.new("TextButton")
+HideBtn.Size = UDim2.new(0, 40, 0, 34)
+HideBtn.Position = UDim2.new(1, -80, 0, 0)
+HideBtn.BackgroundColor3 = COLORS.DeepRed
+HideBtn.Text = "—"
+HideBtn.TextColor3 = COLORS.Text
+HideBtn.Font = Enum.Font.GothamBold
+HideBtn.TextSize = 16
+HideBtn.ZIndex = 3
+HideBtn.Parent = Main
+Gradient(HideBtn, COLORS.DarkRed, COLORS.BrightRed, 0)
+Hover(HideBtn, COLORS.DeepRed, COLORS.DarkRed)
+HideBtn.MouseButton1Click:Connect(function()
+    Main.Visible = false
+    MiniIcon.Visible = true
+end)
+
+MiniIcon.MouseButton1Click:Connect(function()
+    Main.Visible = true
+    MiniIcon.Visible = false
+end)
 
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0, 40, 0, 34)
@@ -601,8 +669,7 @@ Sidebar.ZIndex = 2
 Sidebar.Parent = Main
 Gradient(Sidebar, COLORS.Black, COLORS.DeepRed, 90)
 
-local Pages = {}
-local SideButtons = {}
+local Pages, SideButtons = {}, {}
 
 local function MakeSideTab(name, label, idx, iconFn)
     local btn = Instance.new("TextButton")
@@ -615,18 +682,14 @@ local function MakeSideTab(name, label, idx, iconFn)
     Corner(btn, 6); Stroke(btn, COLORS.DarkRed, 1)
 
     local ico = iconFn(btn)
-    ico.Position = UDim2.new(0.5, -11, 0, 4)
-    ico.ZIndex = 4
+    ico.Position = UDim2.new(0.5, -11, 0, 4); ico.ZIndex = 4
 
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, 0, 0, 12)
     lbl.Position = UDim2.new(0, 0, 1, -14)
-    lbl.BackgroundTransparency = 1
-    lbl.ZIndex = 4
-    lbl.Text = label
-    lbl.TextColor3 = COLORS.SubText
-    lbl.Font = Enum.Font.GothamBold
-    lbl.TextSize = 9
+    lbl.BackgroundTransparency = 1; lbl.ZIndex = 4
+    lbl.Text = label; lbl.TextColor3 = COLORS.SubText
+    lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 9
     lbl.Parent = btn
 
     local page = Instance.new("Frame")
@@ -660,117 +723,74 @@ local TabInfo,    PageInfo    = MakeSideTab("info",    "INFO",   6, Icons.info)
 -- HOME PAGE
 --========================================================
 local Welcome = Instance.new("TextLabel")
-Welcome.Size = UDim2.new(1, -16, 0, 50)
-Welcome.Position = UDim2.new(0, 8, 0, 20)
-Welcome.BackgroundTransparency = 1
-Welcome.ZIndex = 3
-Welcome.Text = "Welcome to BCL!"
-Welcome.TextColor3 = COLORS.Text
-Welcome.Font = Enum.Font.GothamBold
-Welcome.TextSize = 28
-Welcome.TextXAlignment = Enum.TextXAlignment.Center
-Welcome.Parent = PageHome
+Welcome.Size = UDim2.new(1, -16, 0, 50); Welcome.Position = UDim2.new(0, 8, 0, 20)
+Welcome.BackgroundTransparency = 1; Welcome.ZIndex = 3
+Welcome.Text = "Welcome to BCL!"; Welcome.TextColor3 = COLORS.Text
+Welcome.Font = Enum.Font.GothamBold; Welcome.TextSize = 28
+Welcome.TextXAlignment = Enum.TextXAlignment.Center; Welcome.Parent = PageHome
 
 local SubWelcome = Instance.new("TextLabel")
-SubWelcome.Size = UDim2.new(1, -16, 0, 24)
-SubWelcome.Position = UDim2.new(0, 8, 0, 70)
-SubWelcome.BackgroundTransparency = 1
-SubWelcome.ZIndex = 3
-SubWelcome.Text = "Decompile. Test. Learn."
-SubWelcome.TextColor3 = COLORS.SubText
-SubWelcome.Font = Enum.Font.Gotham
-SubWelcome.TextSize = 14
-SubWelcome.TextXAlignment = Enum.TextXAlignment.Center
-SubWelcome.Parent = PageHome
+SubWelcome.Size = UDim2.new(1, -16, 0, 24); SubWelcome.Position = UDim2.new(0, 8, 0, 70)
+SubWelcome.BackgroundTransparency = 1; SubWelcome.ZIndex = 3
+SubWelcome.Text = "Decompile. Test. Learn."; SubWelcome.TextColor3 = COLORS.SubText
+SubWelcome.Font = Enum.Font.Gotham; SubWelcome.TextSize = 14
+SubWelcome.TextXAlignment = Enum.TextXAlignment.Center; SubWelcome.Parent = PageHome
 
 local UpdateBanner = Instance.new("Frame")
-UpdateBanner.Size = UDim2.new(1, -16, 0, 44)
-UpdateBanner.Position = UDim2.new(0, 8, 0, 104)
-UpdateBanner.BackgroundColor3 = COLORS.DeepRed
-UpdateBanner.BorderSizePixel = 0
-UpdateBanner.Visible = false
-UpdateBanner.ZIndex = 3
-UpdateBanner.Parent = PageHome
+UpdateBanner.Size = UDim2.new(1, -16, 0, 44); UpdateBanner.Position = UDim2.new(0, 8, 0, 104)
+UpdateBanner.BackgroundColor3 = COLORS.DeepRed; UpdateBanner.BorderSizePixel = 0
+UpdateBanner.Visible = false; UpdateBanner.ZIndex = 3; UpdateBanner.Parent = PageHome
 Corner(UpdateBanner, 6); Stroke(UpdateBanner, COLORS.Yellow, 1.5)
 Gradient(UpdateBanner, COLORS.Black, COLORS.DeepRed, 90)
 
 local UpdateLabel = Instance.new("TextLabel")
-UpdateLabel.Size = UDim2.new(1, -140, 1, 0)
-UpdateLabel.Position = UDim2.new(0, 8, 0, 0)
-UpdateLabel.BackgroundTransparency = 1
-UpdateLabel.ZIndex = 4
+UpdateLabel.Size = UDim2.new(1, -140, 1, 0); UpdateLabel.Position = UDim2.new(0, 8, 0, 0)
+UpdateLabel.BackgroundTransparency = 1; UpdateLabel.ZIndex = 4
 UpdateLabel.Text = "Looks like the script has been updated. Run?"
-UpdateLabel.TextColor3 = COLORS.Yellow
-UpdateLabel.Font = Enum.Font.GothamBold
-UpdateLabel.TextSize = 12
-UpdateLabel.TextXAlignment = Enum.TextXAlignment.Left
+UpdateLabel.TextColor3 = COLORS.Yellow; UpdateLabel.Font = Enum.Font.GothamBold
+UpdateLabel.TextSize = 12; UpdateLabel.TextXAlignment = Enum.TextXAlignment.Left
 UpdateLabel.Parent = UpdateBanner
 
 local UpdateYes = Instance.new("TextButton")
-UpdateYes.Size = UDim2.new(0, 60, 0, 28)
-UpdateYes.Position = UDim2.new(1, -130, 0, 8)
-UpdateYes.BackgroundColor3 = COLORS.Green
-UpdateYes.Text = "Yes"
-UpdateYes.TextColor3 = COLORS.Text
-UpdateYes.Font = Enum.Font.GothamBold
-UpdateYes.TextSize = 12
-UpdateYes.ZIndex = 4
-UpdateYes.Parent = UpdateBanner
+UpdateYes.Size = UDim2.new(0, 60, 0, 28); UpdateYes.Position = UDim2.new(1, -130, 0, 8)
+UpdateYes.BackgroundColor3 = COLORS.Green; UpdateYes.Text = "Yes"
+UpdateYes.TextColor3 = COLORS.Text; UpdateYes.Font = Enum.Font.GothamBold
+UpdateYes.TextSize = 12; UpdateYes.ZIndex = 4; UpdateYes.Parent = UpdateBanner
 Corner(UpdateYes, 5)
 
 local UpdateNo = Instance.new("TextButton")
-UpdateNo.Size = UDim2.new(0, 60, 0, 28)
-UpdateNo.Position = UDim2.new(1, -65, 0, 8)
-UpdateNo.BackgroundColor3 = COLORS.DeepRed
-UpdateNo.Text = "No"
-UpdateNo.TextColor3 = COLORS.Text
-UpdateNo.Font = Enum.Font.GothamBold
-UpdateNo.TextSize = 12
-UpdateNo.ZIndex = 4
-UpdateNo.Parent = UpdateBanner
+UpdateNo.Size = UDim2.new(0, 60, 0, 28); UpdateNo.Position = UDim2.new(1, -65, 0, 8)
+UpdateNo.BackgroundColor3 = COLORS.DeepRed; UpdateNo.Text = "No"
+UpdateNo.TextColor3 = COLORS.Text; UpdateNo.Font = Enum.Font.GothamBold
+UpdateNo.TextSize = 12; UpdateNo.ZIndex = 4; UpdateNo.Parent = UpdateBanner
 Corner(UpdateNo, 5); Stroke(UpdateNo, COLORS.Red, 1)
 
-UpdateNo.MouseButton1Click:Connect(function()
-    UpdateBanner.Visible = false
-end)
+UpdateNo.MouseButton1Click:Connect(function() UpdateBanner.Visible = false end)
 UpdateYes.MouseButton1Click:Connect(function()
     UpdateBanner.Visible = false
     Notify("Reloading BCL...", COLORS.Yellow)
     _G.BCL_LOADED = false
     ScreenGui:Destroy()
     task.wait(0.3)
-    pcall(function()
-        loadstring(game:HttpGet(CONFIG.GithubRaw))()
-    end)
+    pcall(function() loadstring(game:HttpGet(CONFIG.GithubRaw))() end)
 end)
 
 local CardHolder = Instance.new("Frame")
-CardHolder.Size = UDim2.new(1, -16, 0, 70)
-CardHolder.Position = UDim2.new(0, 8, 0, 160)
-CardHolder.BackgroundTransparency = 1
-CardHolder.ZIndex = 3
-CardHolder.Parent = PageHome
+CardHolder.Size = UDim2.new(1, -16, 0, 70); CardHolder.Position = UDim2.new(0, 8, 0, 160)
+CardHolder.BackgroundTransparency = 1; CardHolder.ZIndex = 3; CardHolder.Parent = PageHome
 
 local function FeatureCard(text, x)
     local card = Instance.new("Frame")
-    card.Size = UDim2.new(0, 155, 1, 0)
-    card.Position = UDim2.new(0, x, 0, 0)
-    card.BackgroundColor3 = COLORS.DeepRed
-    card.BorderSizePixel = 0
-    card.ZIndex = 3
-    card.Parent = CardHolder
+    card.Size = UDim2.new(0, 155, 1, 0); card.Position = UDim2.new(0, x, 0, 0)
+    card.BackgroundColor3 = COLORS.DeepRed; card.BorderSizePixel = 0
+    card.ZIndex = 3; card.Parent = CardHolder
     Corner(card, 8); Stroke(card, COLORS.DarkRed, 1)
     Gradient(card, COLORS.Black, COLORS.DeepRed, 90)
     local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -10, 1, 0)
-    lbl.Position = UDim2.new(0, 5, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.ZIndex = 4
-    lbl.Text = text
-    lbl.TextColor3 = COLORS.Text
-    lbl.Font = Enum.Font.GothamBold
-    lbl.TextSize = 12
-    lbl.TextWrapped = true
+    lbl.Size = UDim2.new(1, -10, 1, 0); lbl.Position = UDim2.new(0, 5, 0, 0)
+    lbl.BackgroundTransparency = 1; lbl.ZIndex = 4
+    lbl.Text = text; lbl.TextColor3 = COLORS.Text
+    lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 12; lbl.TextWrapped = true
     lbl.Parent = card
 end
 FeatureCard("Decompile\nany script", 0)
@@ -778,47 +798,25 @@ FeatureCard("Test your\nexecutor", 165)
 FeatureCard("Download\nfull place", 330)
 
 local DiscordBtn = Instance.new("TextButton")
-DiscordBtn.Size = UDim2.new(0, 260, 0, 40)
-DiscordBtn.Position = UDim2.new(0.5, -130, 1, -60)
+DiscordBtn.Size = UDim2.new(0, 260, 0, 40); DiscordBtn.Position = UDim2.new(0.5, -130, 1, -60)
 DiscordBtn.BackgroundColor3 = COLORS.DiscordPurple
 DiscordBtn.Text = "Join our Discord!"
 DiscordBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-DiscordBtn.Font = Enum.Font.GothamBold
-DiscordBtn.TextSize = 14
-DiscordBtn.ZIndex = 3
-DiscordBtn.Parent = PageHome
+DiscordBtn.Font = Enum.Font.GothamBold; DiscordBtn.TextSize = 14
+DiscordBtn.ZIndex = 3; DiscordBtn.Parent = PageHome
 Corner(DiscordBtn, 8); Stroke(DiscordBtn, COLORS.DiscordLight, 1)
 Gradient(DiscordBtn, COLORS.DiscordDark, COLORS.DiscordPurple, 45)
 Hover(DiscordBtn, COLORS.DiscordPurple, COLORS.DiscordLight)
 
 DiscordBtn.MouseButton1Click:Connect(function()
     if type(setclipboard) == "function" then pcall(setclipboard, CONFIG.Discord) end
-    pcall(function()
-        game:GetService("GuiService"):OpenBrowserWindow(CONFIG.Discord)
-    end)
+    pcall(function() game:GetService("GuiService"):OpenBrowserWindow(CONFIG.Discord) end)
     Notify("Discord link copied!", COLORS.DiscordLight)
 end)
 
 --========================================================
--- COMPILER PAGE
+-- Button row helper
 --========================================================
-local CIn = Instance.new("TextBox")
-CIn.Size = UDim2.new(1, -16, 0, 100)
-CIn.Position = UDim2.new(0, 8, 0, 6)
-CIn.BackgroundColor3 = COLORS.Black
-CIn.TextColor3 = COLORS.Text
-CIn.PlaceholderText = "Enter Lua code..."
-CIn.PlaceholderColor3 = COLORS.SubText
-CIn.Font = Enum.Font.Code
-CIn.TextSize = 12
-CIn.TextWrapped = true
-CIn.TextXAlignment = Enum.TextXAlignment.Left
-CIn.TextYAlignment = Enum.TextYAlignment.Top
-CIn.ClearTextOnFocus = false
-CIn.ZIndex = 3
-CIn.Parent = PageCompile
-Corner(CIn, 5); Stroke(CIn, COLORS.Red, 1); Pad(CIn, 6)
-
 local function BtnRow(parent, y, defs)
     local out = {}
     local total = #defs
@@ -843,6 +841,21 @@ local function BtnRow(parent, y, defs)
     return out
 end
 
+--========================================================
+-- COMPILER PAGE
+--========================================================
+local CIn = Instance.new("TextBox")
+CIn.Size = UDim2.new(1, -16, 0, 100); CIn.Position = UDim2.new(0, 8, 0, 6)
+CIn.BackgroundColor3 = COLORS.Black; CIn.TextColor3 = COLORS.Text
+CIn.PlaceholderText = "Enter Lua code..."
+CIn.PlaceholderColor3 = COLORS.SubText
+CIn.Font = Enum.Font.Code; CIn.TextSize = 12
+CIn.TextWrapped = true
+CIn.TextXAlignment = Enum.TextXAlignment.Left
+CIn.TextYAlignment = Enum.TextYAlignment.Top
+CIn.ClearTextOnFocus = false; CIn.ZIndex = 3; CIn.Parent = PageCompile
+Corner(CIn, 5); Stroke(CIn, COLORS.Red, 1); Pad(CIn, 6)
+
 local CButtons = BtnRow(PageCompile, 112, {
     {key="compile", text="COMPILE", color=COLORS.Red},
     {key="run",     text="RUN"},
@@ -852,26 +865,15 @@ local CButtons = BtnRow(PageCompile, 112, {
 })
 
 local COut = Instance.new("TextBox")
-COut.Size = UDim2.new(1, -16, 1, -154)
-COut.Position = UDim2.new(0, 8, 0, 148)
-COut.BackgroundColor3 = COLORS.Black
-COut.TextColor3 = COLORS.Text
-COut.Font = Enum.Font.Code
-COut.TextSize = 11
+COut.Size = UDim2.new(1, -16, 1, -154); COut.Position = UDim2.new(0, 8, 0, 148)
+COut.BackgroundColor3 = COLORS.Black; COut.TextColor3 = COLORS.Text
+COut.Font = Enum.Font.Code; COut.TextSize = 11
 COut.TextWrapped = true
 COut.TextXAlignment = Enum.TextXAlignment.Left
 COut.TextYAlignment = Enum.TextYAlignment.Top
-COut.TextEditable = false
-COut.ClearTextOnFocus = false
-COut.ZIndex = 3
-COut.Text = "-- BCL Compiler ready."
-COut.Parent = PageCompile
+COut.TextEditable = false; COut.ClearTextOnFocus = false
+COut.ZIndex = 3; COut.Text = "-- BCL Compiler ready."; COut.Parent = PageCompile
 Corner(COut, 5); Stroke(COut, COLORS.Red, 1); Pad(COut, 6)
-
-local function PushHistory(entry)
-    table.insert(STATE.History, 1, entry)
-    if #STATE.History > 20 then table.remove(STATE.History) end
-end
 
 CButtons.compile.MouseButton1Click:Connect(function()
     local src = CIn.Text
@@ -881,7 +883,6 @@ CButtons.compile.MouseButton1Click:Connect(function()
         COut.Text = string.format("-- Compilation OK.\n-- Bytecode: %d bytes.\n-- First 64 bytes (hex):\n%s",
             #bc, (bc:sub(1,64):gsub(".", function(c) return string.format("%02X ", c:byte()) end)))
         Notify("Compiled: " .. #bc .. " bytes", COLORS.Green)
-        PushHistory("COMPILE: " .. #bc .. " bytes")
     else
         COut.Text = "-- Error: " .. tostring(err)
         Notify("Compile failed", COLORS.BrightRed)
@@ -899,15 +900,12 @@ CButtons.copy.MouseButton1Click:Connect(function()
     end
 end)
 CButtons.clear.MouseButton1Click:Connect(function()
-    CIn.Text = ""
-    COut.Text = "-- BCL Compiler ready."
+    CIn.Text = ""; COut.Text = "-- BCL Compiler ready."
 end)
 CButtons.save.MouseButton1Click:Connect(function()
     if type(writefile) == "function" then
         pcall(writefile, "BCL_compile_out.txt", COut.Text)
         Notify("Saved: BCL_compile_out.txt", COLORS.Green)
-    else
-        Notify("writefile unavailable", COLORS.BrightRed)
     end
 end)
 
@@ -915,20 +913,15 @@ end)
 -- DECOMPILER PAGE
 --========================================================
 local DIn = Instance.new("TextBox")
-DIn.Size = UDim2.new(1, -16, 0, 100)
-DIn.Position = UDim2.new(0, 8, 0, 6)
-DIn.BackgroundColor3 = COLORS.Black
-DIn.TextColor3 = COLORS.Text
+DIn.Size = UDim2.new(1, -16, 0, 100); DIn.Position = UDim2.new(0, 8, 0, 6)
+DIn.BackgroundColor3 = COLORS.Black; DIn.TextColor3 = COLORS.Text
 DIn.PlaceholderText = 'Paste loadstring("...") or bytecode...'
 DIn.PlaceholderColor3 = COLORS.SubText
-DIn.Font = Enum.Font.Code
-DIn.TextSize = 12
+DIn.Font = Enum.Font.Code; DIn.TextSize = 12
 DIn.TextWrapped = true
 DIn.TextXAlignment = Enum.TextXAlignment.Left
 DIn.TextYAlignment = Enum.TextYAlignment.Top
-DIn.ClearTextOnFocus = false
-DIn.ZIndex = 3
-DIn.Parent = PageDecomp
+DIn.ClearTextOnFocus = false; DIn.ZIndex = 3; DIn.Parent = PageDecomp
 Corner(DIn, 5); Stroke(DIn, COLORS.Red, 1); Pad(DIn, 6)
 
 local DButtons = BtnRow(PageDecomp, 112, {
@@ -940,20 +933,14 @@ local DButtons = BtnRow(PageDecomp, 112, {
 })
 
 local DOut = Instance.new("TextBox")
-DOut.Size = UDim2.new(1, -16, 1, -154)
-DOut.Position = UDim2.new(0, 8, 0, 148)
-DOut.BackgroundColor3 = COLORS.Black
-DOut.TextColor3 = COLORS.Text
-DOut.Font = Enum.Font.Code
-DOut.TextSize = 11
+DOut.Size = UDim2.new(1, -16, 1, -154); DOut.Position = UDim2.new(0, 8, 0, 148)
+DOut.BackgroundColor3 = COLORS.Black; DOut.TextColor3 = COLORS.Text
+DOut.Font = Enum.Font.Code; DOut.TextSize = 11
 DOut.TextWrapped = true
 DOut.TextXAlignment = Enum.TextXAlignment.Left
 DOut.TextYAlignment = Enum.TextYAlignment.Top
-DOut.TextEditable = false
-DOut.ClearTextOnFocus = false
-DOut.ZIndex = 3
-DOut.Text = "-- BCL Decompiler ready."
-DOut.Parent = PageDecomp
+DOut.TextEditable = false; DOut.ClearTextOnFocus = false
+DOut.ZIndex = 3; DOut.Text = "-- BCL Decompiler ready."; DOut.Parent = PageDecomp
 Corner(DOut, 5); Stroke(DOut, COLORS.Red, 1); Pad(DOut, 6)
 
 DButtons.decompile.MouseButton1Click:Connect(function()
@@ -967,7 +954,6 @@ DButtons.decompile.MouseButton1Click:Connect(function()
     task.wait(0.3)
     DOut.Text = Decompiler.Try(code)
     Notify("Decompiled: " .. #DOut.Text .. " chars", COLORS.Green)
-    PushHistory("DECOMPILE: " .. #DOut.Text .. " chars")
 end)
 DButtons.beautify.MouseButton1Click:Connect(function()
     DOut.Text = Beautifier.Format(DOut.Text)
@@ -980,15 +966,12 @@ DButtons.copy.MouseButton1Click:Connect(function()
     end
 end)
 DButtons.clear.MouseButton1Click:Connect(function()
-    DIn.Text = ""
-    DOut.Text = "-- BCL Decompiler ready."
+    DIn.Text = ""; DOut.Text = "-- BCL Decompiler ready."
 end)
 DButtons.save.MouseButton1Click:Connect(function()
     if type(writefile) == "function" then
         pcall(writefile, "BCL_decompile_out.lua", DOut.Text)
         Notify("Saved: BCL_decompile_out.lua", COLORS.Green)
-    else
-        Notify("writefile unavailable", COLORS.BrightRed)
     end
 end)
 
@@ -996,83 +979,54 @@ end)
 -- TOOLS PAGE
 --========================================================
 local TIn = Instance.new("TextBox")
-TIn.Size = UDim2.new(1, -16, 0, 70)
-TIn.Position = UDim2.new(0, 8, 0, 6)
-TIn.BackgroundColor3 = COLORS.Black
-TIn.TextColor3 = COLORS.Text
+TIn.Size = UDim2.new(1, -16, 0, 70); TIn.Position = UDim2.new(0, 8, 0, 6)
+TIn.BackgroundColor3 = COLORS.Black; TIn.TextColor3 = COLORS.Text
 TIn.PlaceholderText = "Code to obfuscate..."
 TIn.PlaceholderColor3 = COLORS.SubText
-TIn.Font = Enum.Font.Code
-TIn.TextSize = 12
+TIn.Font = Enum.Font.Code; TIn.TextSize = 12
 TIn.TextWrapped = true
 TIn.TextXAlignment = Enum.TextXAlignment.Left
 TIn.TextYAlignment = Enum.TextYAlignment.Top
-TIn.ClearTextOnFocus = false
-TIn.ZIndex = 3
-TIn.Parent = PageTools
+TIn.ClearTextOnFocus = false; TIn.ZIndex = 3; TIn.Parent = PageTools
 Corner(TIn, 5); Stroke(TIn, COLORS.Red, 1); Pad(TIn, 6)
 
 local TObf1 = Instance.new("TextButton")
-TObf1.Size = UDim2.new(0, 140, 0, 28)
-TObf1.Position = UDim2.new(0, 8, 0, 82)
-TObf1.BackgroundColor3 = COLORS.Red
-TObf1.Text = "Obfuscate L1"
-TObf1.TextColor3 = COLORS.Text
-TObf1.Font = Enum.Font.GothamBold
-TObf1.TextSize = 11
-TObf1.ZIndex = 3
-TObf1.Parent = PageTools
+TObf1.Size = UDim2.new(0, 140, 0, 28); TObf1.Position = UDim2.new(0, 8, 0, 82)
+TObf1.BackgroundColor3 = COLORS.Red; TObf1.Text = "Obfuscate L1"
+TObf1.TextColor3 = COLORS.Text; TObf1.Font = Enum.Font.GothamBold
+TObf1.TextSize = 11; TObf1.ZIndex = 3; TObf1.Parent = PageTools
 Corner(TObf1, 5); Gradient(TObf1, COLORS.DarkRed, COLORS.BrightRed, 0)
 
 local TObf2 = Instance.new("TextButton")
-TObf2.Size = UDim2.new(0, 140, 0, 28)
-TObf2.Position = UDim2.new(0, 154, 0, 82)
-TObf2.BackgroundColor3 = COLORS.Red
-TObf2.Text = "Obfuscate L2"
-TObf2.TextColor3 = COLORS.Text
-TObf2.Font = Enum.Font.GothamBold
-TObf2.TextSize = 11
-TObf2.ZIndex = 3
-TObf2.Parent = PageTools
+TObf2.Size = UDim2.new(0, 140, 0, 28); TObf2.Position = UDim2.new(0, 154, 0, 82)
+TObf2.BackgroundColor3 = COLORS.Red; TObf2.Text = "Obfuscate L2"
+TObf2.TextColor3 = COLORS.Text; TObf2.Font = Enum.Font.GothamBold
+TObf2.TextSize = 11; TObf2.ZIndex = 3; TObf2.Parent = PageTools
 Corner(TObf2, 5); Gradient(TObf2, COLORS.DarkRed, COLORS.BrightRed, 0)
 
--- Download Place (renamed from SaveInstance, moved here, BELOW obfuscation)
 local TDownload = Instance.new("TextButton")
-TDownload.Size = UDim2.new(1, -16, 0, 32)
-TDownload.Position = UDim2.new(0, 8, 0, 116)
-TDownload.BackgroundColor3 = COLORS.Red
-TDownload.Text = "Download Place"
-TDownload.TextColor3 = COLORS.Text
-TDownload.Font = Enum.Font.GothamBold
-TDownload.TextSize = 13
-TDownload.ZIndex = 3
-TDownload.Parent = PageTools
+TDownload.Size = UDim2.new(1, -16, 0, 32); TDownload.Position = UDim2.new(0, 8, 0, 116)
+TDownload.BackgroundColor3 = COLORS.Red; TDownload.Text = "Download Place"
+TDownload.TextColor3 = COLORS.Text; TDownload.Font = Enum.Font.GothamBold
+TDownload.TextSize = 13; TDownload.ZIndex = 3; TDownload.Parent = PageTools
 Corner(TDownload, 5); Gradient(TDownload, COLORS.DarkRed, COLORS.BrightRed, 0)
 Hover(TDownload, COLORS.Red, COLORS.BrightRed)
 
 local TButtons = BtnRow(PageTools, 154, {
-    {key="copy",   text="COPY"},
-    {key="clear",  text="CLEAR"},
-    {key="save",   text="SAVE"},
-    {key="dummy",  text="—"},
+    {key="copy",  text="COPY"},
+    {key="clear", text="CLEAR"},
+    {key="save",  text="SAVE"},
 })
-TButtons.dummy.Visible = false
 
 local TOut = Instance.new("TextBox")
-TOut.Size = UDim2.new(1, -16, 1, -196)
-TOut.Position = UDim2.new(0, 8, 0, 190)
-TOut.BackgroundColor3 = COLORS.Black
-TOut.TextColor3 = COLORS.Text
-TOut.Font = Enum.Font.Code
-TOut.TextSize = 11
+TOut.Size = UDim2.new(1, -16, 1, -196); TOut.Position = UDim2.new(0, 8, 0, 190)
+TOut.BackgroundColor3 = COLORS.Black; TOut.TextColor3 = COLORS.Text
+TOut.Font = Enum.Font.Code; TOut.TextSize = 11
 TOut.TextWrapped = true
 TOut.TextXAlignment = Enum.TextXAlignment.Left
 TOut.TextYAlignment = Enum.TextYAlignment.Top
-TOut.TextEditable = false
-TOut.ClearTextOnFocus = false
-TOut.ZIndex = 3
-TOut.Text = "-- BCL Tools ready."
-TOut.Parent = PageTools
+TOut.TextEditable = false; TOut.ClearTextOnFocus = false
+TOut.ZIndex = 3; TOut.Text = "-- BCL Tools ready."; TOut.Parent = PageTools
 Corner(TOut, 5); Stroke(TOut, COLORS.Red, 1); Pad(TOut, 6)
 
 TObf1.MouseButton1Click:Connect(function()
@@ -1087,14 +1041,16 @@ end)
 TDownload.MouseButton1Click:Connect(function()
     TOut.Text = "-- Download Place: scanning...\n"
     Notify("Download Place started", COLORS.Yellow)
-    local ok, result, count = pcall(function()
+    local ok, result, count, skipped = pcall(function()
         return SaveInstance.Save(function(p, t)
             TOut.Text = string.format("-- Download Place: %d / %d", p, t)
         end)
     end)
     if ok and result then
-        TOut.Text = "-- Download Place complete.\n-- Scripts dumped: " .. tostring(count) ..
-                    "\n-- Saved to: BCL_SaveInstance.lua\n\n" .. result:sub(1, 3000)
+        TOut.Text = string.format(
+            "-- Download Place complete.\n-- Scripts with source: %d\n-- Skipped: %d\n-- Saved to: BCL_SaveInstance.lua\n\n%s",
+            count, skipped, result:sub(1, 3000)
+        )
         Notify("Downloaded: " .. tostring(count) .. " scripts", COLORS.Green)
     else
         TOut.Text = "-- Download Place failed: " .. tostring(result)
@@ -1109,8 +1065,7 @@ TButtons.copy.MouseButton1Click:Connect(function()
     end
 end)
 TButtons.clear.MouseButton1Click:Connect(function()
-    TIn.Text = ""
-    TOut.Text = "-- BCL Tools ready."
+    TIn.Text = ""; TOut.Text = "-- BCL Tools ready."
 end)
 TButtons.save.MouseButton1Click:Connect(function()
     if type(writefile) == "function" then
@@ -1123,40 +1078,30 @@ end)
 -- TEST PAGE
 --========================================================
 local TestInfo = Instance.new("TextLabel")
-TestInfo.Size = UDim2.new(1, -16, 0, 32)
-TestInfo.Position = UDim2.new(0, 8, 0, 6)
-TestInfo.BackgroundColor3 = COLORS.Black
-TestInfo.TextColor3 = COLORS.SubText
-TestInfo.Font = Enum.Font.Gotham
-TestInfo.TextSize = 12
+TestInfo.Size = UDim2.new(1, -16, 0, 32); TestInfo.Position = UDim2.new(0, 8, 0, 6)
+TestInfo.BackgroundColor3 = COLORS.Black; TestInfo.TextColor3 = COLORS.SubText
+TestInfo.Font = Enum.Font.Gotham; TestInfo.TextSize = 12
 TestInfo.Text = "Load external scripts to test your executor."
 TestInfo.TextXAlignment = Enum.TextXAlignment.Left
-TestInfo.ZIndex = 3
-TestInfo.Parent = PageTest
+TestInfo.ZIndex = 3; TestInfo.Parent = PageTest
 Corner(TestInfo, 5); Stroke(TestInfo, COLORS.Red, 1)
 local TIPad = Instance.new("UIPadding")
-TIPad.PaddingLeft = UDim.new(0, 8); TIPad.PaddingRight = UDim.new(0, 8)
-TIPad.Parent = TestInfo
+TIPad.PaddingLeft = UDim.new(0, 8); TIPad.PaddingRight = UDim.new(0, 8); TIPad.Parent = TestInfo
 
 local TestButtons = BtnRow(PageTest, 46, {
-    {key="iy",   text="Infinite Yield", color=COLORS.Red},
-    {key="unc",  text="UNC Test",       color=COLORS.Red},
+    {key="iy",  text="Infinite Yield", color=COLORS.Red},
+    {key="unc", text="UNC Test",       color=COLORS.Red},
 })
 
 local TestOut = Instance.new("TextBox")
-TestOut.Size = UDim2.new(1, -16, 1, -100)
-TestOut.Position = UDim2.new(0, 8, 0, 90)
-TestOut.BackgroundColor3 = COLORS.Black
-TestOut.TextColor3 = COLORS.Text
-TestOut.Font = Enum.Font.Code
-TestOut.TextSize = 11
+TestOut.Size = UDim2.new(1, -16, 1, -100); TestOut.Position = UDim2.new(0, 8, 0, 90)
+TestOut.BackgroundColor3 = COLORS.Black; TestOut.TextColor3 = COLORS.Text
+TestOut.Font = Enum.Font.Code; TestOut.TextSize = 11
 TestOut.TextWrapped = true
 TestOut.TextXAlignment = Enum.TextXAlignment.Left
 TestOut.TextYAlignment = Enum.TextYAlignment.Top
-TestOut.TextEditable = false
-TestOut.ClearTextOnFocus = false
-TestOut.ZIndex = 3
-TestOut.Text = "-- Test results will appear here."
+TestOut.TextEditable = false; TestOut.ClearTextOnFocus = false
+TestOut.ZIndex = 3; TestOut.Text = "-- Test results will appear here."
 TestOut.Parent = PageTest
 Corner(TestOut, 5); Stroke(TestOut, COLORS.Red, 1); Pad(TestOut, 6)
 
@@ -1192,105 +1137,87 @@ end)
 -- INFO PAGE
 --========================================================
 local ProfileCard = Instance.new("Frame")
-ProfileCard.Size = UDim2.new(1, 0, 0, 80)
-ProfileCard.Position = UDim2.new(0, 0, 0, 6)
-ProfileCard.BackgroundColor3 = COLORS.Black
-ProfileCard.BorderSizePixel = 0
-ProfileCard.ZIndex = 3
-ProfileCard.Parent = PageInfo
+ProfileCard.Size = UDim2.new(1, 0, 0, 80); ProfileCard.Position = UDim2.new(0, 0, 0, 6)
+ProfileCard.BackgroundColor3 = COLORS.Black; ProfileCard.BorderSizePixel = 0
+ProfileCard.ZIndex = 3; ProfileCard.Parent = PageInfo
 Corner(ProfileCard, 6); Stroke(ProfileCard, COLORS.Red, 1)
 Gradient(ProfileCard, COLORS.Black, COLORS.DeepRed, 135)
 
 local BigAvatar = Instance.new("ImageLabel")
-BigAvatar.Size = UDim2.new(0, 60, 0, 60)
-BigAvatar.Position = UDim2.new(0, 10, 0, 10)
-BigAvatar.BackgroundColor3 = COLORS.Black
-BigAvatar.Image = ""
-BigAvatar.ZIndex = 4
-BigAvatar.Parent = ProfileCard
+BigAvatar.Size = UDim2.new(0, 60, 0, 60); BigAvatar.Position = UDim2.new(0, 10, 0, 10)
+BigAvatar.BackgroundColor3 = COLORS.Black; BigAvatar.Image = ""
+BigAvatar.ZIndex = 4; BigAvatar.Parent = ProfileCard
 Corner(BigAvatar, 30)
 local bigStroke = Stroke(BigAvatar, COLORS.BrightRed, 2)
 Pulse(bigStroke, 1, 3.5, 1.5)
 local BGL = Instance.new("TextLabel")
-BGL.Size = UDim2.new(1,0,1,0); BGL.BackgroundTransparency = 1
-BGL.ZIndex = 5
+BGL.Size = UDim2.new(1,0,1,0); BGL.BackgroundTransparency = 1; BGL.ZIndex = 5
 BGL.Text = "?"; BGL.TextColor3 = COLORS.BrightRed
 BGL.Font = Enum.Font.GothamBold; BGL.TextSize = 28; BGL.Parent = BigAvatar
 
 local PName = Instance.new("TextLabel")
 PName.Size = UDim2.new(1, -84, 0, 20); PName.Position = UDim2.new(0, 80, 0, 10)
-PName.BackgroundTransparency = 1; PName.Text = "—"
-PName.ZIndex = 4
+PName.BackgroundTransparency = 1; PName.Text = "—"; PName.ZIndex = 4
 PName.TextColor3 = COLORS.Text; PName.Font = Enum.Font.GothamBold; PName.TextSize = 16
 PName.TextXAlignment = Enum.TextXAlignment.Left; PName.Parent = ProfileCard
 
 local PSub = Instance.new("TextLabel")
 PSub.Size = UDim2.new(1, -84, 0, 18); PSub.Position = UDim2.new(0, 80, 0, 32)
-PSub.BackgroundTransparency = 1; PSub.Text = "—"
-PSub.ZIndex = 4
+PSub.BackgroundTransparency = 1; PSub.Text = "—"; PSub.ZIndex = 4
 PSub.TextColor3 = COLORS.SubText; PSub.Font = Enum.Font.Gotham; PSub.TextSize = 12
 PSub.TextXAlignment = Enum.TextXAlignment.Left; PSub.Parent = ProfileCard
 
 local PId = Instance.new("TextLabel")
 PId.Size = UDim2.new(1, -84, 0, 18); PId.Position = UDim2.new(0, 80, 0, 50)
-PId.BackgroundTransparency = 1; PId.Text = "—"
-PId.ZIndex = 4
+PId.BackgroundTransparency = 1; PId.Text = "—"; PId.ZIndex = 4
 PId.TextColor3 = COLORS.SubText; PId.Font = Enum.Font.Gotham; PId.TextSize = 11
 PId.TextXAlignment = Enum.TextXAlignment.Left; PId.Parent = ProfileCard
 
 local ExecCard = Instance.new("Frame")
 ExecCard.Size = UDim2.new(1, 0, 0, 32); ExecCard.Position = UDim2.new(0, 0, 0, 92)
 ExecCard.BackgroundColor3 = COLORS.Black; ExecCard.BorderSizePixel = 0
-ExecCard.ZIndex = 3
-ExecCard.Parent = PageInfo
+ExecCard.ZIndex = 3; ExecCard.Parent = PageInfo
 Corner(ExecCard, 6); Stroke(ExecCard, COLORS.Red, 1)
 
 local ExecLabel = Instance.new("TextLabel")
 ExecLabel.Size = UDim2.new(1, -16, 1, 0); ExecLabel.Position = UDim2.new(0, 8, 0, 0)
-ExecLabel.BackgroundTransparency = 1; ExecLabel.Text = "Executor: —"
-ExecLabel.ZIndex = 4
+ExecLabel.BackgroundTransparency = 1; ExecLabel.Text = "Executor: —"; ExecLabel.ZIndex = 4
 ExecLabel.TextColor3 = COLORS.Text; ExecLabel.Font = Enum.Font.Gotham; ExecLabel.TextSize = 12
 ExecLabel.TextXAlignment = Enum.TextXAlignment.Left; ExecLabel.Parent = ExecCard
 
 local FuncCard = Instance.new("Frame")
 FuncCard.Size = UDim2.new(1, 0, 0, 66); FuncCard.Position = UDim2.new(0, 0, 0, 130)
 FuncCard.BackgroundColor3 = COLORS.Black; FuncCard.BorderSizePixel = 0
-FuncCard.ZIndex = 3
-FuncCard.Parent = PageInfo
+FuncCard.ZIndex = 3; FuncCard.Parent = PageInfo
 Corner(FuncCard, 6); Stroke(FuncCard, COLORS.Red, 1)
 
 local FuncLabel = Instance.new("TextLabel")
 FuncLabel.Size = UDim2.new(1, -16, 0, 20); FuncLabel.Position = UDim2.new(0, 8, 0, 4)
-FuncLabel.BackgroundTransparency = 1; FuncLabel.Text = "Functions loaded: —"
-FuncLabel.ZIndex = 4
+FuncLabel.BackgroundTransparency = 1; FuncLabel.Text = "Functions loaded: —"; FuncLabel.ZIndex = 4
 FuncLabel.TextColor3 = COLORS.Text; FuncLabel.Font = Enum.Font.Gotham; FuncLabel.TextSize = 12
 FuncLabel.TextXAlignment = Enum.TextXAlignment.Left; FuncLabel.Parent = FuncCard
 
 local BarBg = Instance.new("Frame")
 BarBg.Size = UDim2.new(1, -16, 0, 12); BarBg.Position = UDim2.new(0, 8, 0, 26)
 BarBg.BackgroundColor3 = COLORS.DeepRed; BarBg.BorderSizePixel = 0
-BarBg.ZIndex = 4
-BarBg.Parent = FuncCard
+BarBg.ZIndex = 4; BarBg.Parent = FuncCard
 Corner(BarBg, 6)
 
 local BarFill = Instance.new("Frame")
 BarFill.Size = UDim2.new(0, 0, 1, 0); BarFill.BackgroundColor3 = COLORS.BrightRed
-BarFill.BorderSizePixel = 0
-BarFill.ZIndex = 5
-BarFill.Parent = BarBg
+BarFill.BorderSizePixel = 0; BarFill.ZIndex = 5; BarFill.Parent = BarBg
 Corner(BarFill, 6); Gradient(BarFill, COLORS.Red, COLORS.BrightRed, 0)
 
 local GradeLabel = Instance.new("TextLabel")
 GradeLabel.Size = UDim2.new(1, -16, 0, 18); GradeLabel.Position = UDim2.new(0, 8, 0, 42)
-GradeLabel.BackgroundTransparency = 1; GradeLabel.Text = "Grade: —"
-GradeLabel.ZIndex = 4
-GradeLabel.TextColor3 = COLORS.SubText; GradeLabel.Font = Enum.Font.GothamBold; GradeLabel.TextSize = 11
-GradeLabel.TextXAlignment = Enum.TextXAlignment.Left; GradeLabel.Parent = FuncCard
+GradeLabel.BackgroundTransparency = 1; GradeLabel.Text = "Grade: —"; GradeLabel.ZIndex = 4
+GradeLabel.TextColor3 = COLORS.SubText; GradeLabel.Font = Enum.Font.GothamBold
+GradeLabel.TextSize = 11; GradeLabel.TextXAlignment = Enum.TextXAlignment.Left
+GradeLabel.Parent = FuncCard
 
 local Uptime = Instance.new("TextLabel")
 Uptime.Size = UDim2.new(1, -16, 0, 16); Uptime.Position = UDim2.new(0, 0, 0, 200)
-Uptime.BackgroundTransparency = 1; Uptime.Text = "Session: 00:00"
-Uptime.ZIndex = 4
+Uptime.BackgroundTransparency = 1; Uptime.Text = "Session: 00:00"; Uptime.ZIndex = 4
 Uptime.TextColor3 = COLORS.SubText; Uptime.Font = Enum.Font.Code; Uptime.TextSize = 11
 Uptime.TextXAlignment = Enum.TextXAlignment.Left; Uptime.Parent = PageInfo
 
@@ -1335,7 +1262,7 @@ Breathe(mainStroke, COLORS.BrightRed, COLORS.DarkRed, 3)
 TabHome.MouseButton1Click:Fire()
 
 --========================================================
--- AUTO-UPDATE POLLING (every 30s)
+-- AUTO-UPDATE POLLING
 --========================================================
 task.spawn(function()
     task.wait(5)
