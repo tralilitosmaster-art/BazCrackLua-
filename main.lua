@@ -1,14 +1,17 @@
 --[[
     BazCrackLua (BCL)
-    Version: 1.1.2
+    Version: 1.2.0
     Changelog:
-      - v1.1.2: CHAT and INFO tabs fixed (no more empty pages)
-      - v1.1.2: method #1/#2 buttons correctly highlight active
-      - v1.1.2: HOME layout fixed — cards no longer overlap Discord
-      - v1.1.2: process indicator with live timer
-      - v1.1.2: speed slider/label overlap fixed
-      - v1.1.2: BazaChat auto-decompile if input looks like code
-      - v1.1.2: minor ZIndex/position fixes
+      - v1.2.0: MAJOR standalone (no key system)
+      - v1.2.0: 3 decompile methods — #1 🔥 Streak, #2 💎 Diamond, #3 Old
+      - v1.2.0: new icons (Home, Comp, Decomp, Obfusc, Tools, Info)
+      - v1.2.0: BazaChat removed
+      - v1.2.0: Lag Server (2 methods)
+      - v1.2.0: Clear All button
+      - v1.2.0: Download Place with speed slider + Stop
+      - v1.2.0: FIXED TEST and INFO pages
+      - v1.2.0: FIXED Speed slider draggable
+      - v1.2.0: HOME opens by default
 --]]
 
 if _G.BCL_LOADED then
@@ -18,7 +21,7 @@ end
 _G.BCL_LOADED = true
 
 local CONFIG = {
-    Version    = "1.1.2",
+    Version    = "1.2.0",
     Discord    = "https://discord.gg/vVFeyntpa",
     GithubRaw  = "https://raw.githubusercontent.com/tralilitosmaster-art/BazCrackLua-/main/main.lua",
     UpdatePoll = 30,
@@ -55,9 +58,6 @@ local STATE = {
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
 
---========================================================
--- UI HELPERS
---========================================================
 local function Gradient(obj, c1, c2, rot)
     local g = Instance.new("UIGradient")
     g.Color = ColorSequence.new(c1, c2)
@@ -125,9 +125,6 @@ local function Hover(btn, normal, hover)
     btn.MouseLeave:Connect(function() btn.BackgroundColor3 = normal end)
 end
 
---========================================================
--- ICONS
---========================================================
 local Icons = {}
 local function IconBase(parent)
     local f = Instance.new("Frame")
@@ -148,30 +145,50 @@ end
 
 Icons.home = function(parent)
     local f = IconBase(parent)
-    local r1 = Bar(f, UDim2.new(0, 14, 0, 3), UDim2.new(0.2, 0, 0.3, 0)); r1.Rotation = 45
-    local r2 = Bar(f, UDim2.new(0, 14, 0, 3), UDim2.new(0.2, 0, 0.3, 0)); r2.Rotation = -45
-    r2.Position = UDim2.new(0.5, 0, 0.3, 0)
-    Bar(f, UDim2.new(0, 14, 0, 12), UDim2.new(0.18, 0, 0.55, 0))
+    local roofL = Bar(f, UDim2.new(0, 12, 0, 3), UDim2.new(0.18, 0, 0.25, 0)); roofL.Rotation = 45
+    local roofR = Bar(f, UDim2.new(0, 12, 0, 3), UDim2.new(0.5, 0, 0.25, 0)); roofR.Rotation = -45
+    Bar(f, UDim2.new(0, 14, 0, 11), UDim2.new(0.18, 0, 0.55, 0))
     return f
 end
 Icons.compile = function(parent)
     local f = IconBase(parent)
-    Bar(f, UDim2.new(0, 3, 0, 16), UDim2.new(0.15, 0, 0.15, 0))
-    Bar(f, UDim2.new(0, 3, 0, 16), UDim2.new(0.7, 0, 0.15, 0))
-    Bar(f, UDim2.new(0, 10, 0, 3), UDim2.new(0.3, 0, 0.45, 0))
+    Bar(f, UDim2.new(0, 4, 0, 14), UDim2.new(0.35, 0, 0.25, 0))
+    Bar(f, UDim2.new(0, 12, 0, 4), UDim2.new(0.18, 0, 0.15, 0))
+    Bar(f, UDim2.new(0, 4, 0, 4), UDim2.new(0.15, 0, 0.7, 0), COLORS.Yellow)
+    Bar(f, UDim2.new(0, 3, 0, 3), UDim2.new(0.7, 0, 0.75, 0), COLORS.Yellow)
     return f
 end
 Icons.decompile = function(parent)
     local f = IconBase(parent)
-    Bar(f, UDim2.new(0, 10, 0, 3), UDim2.new(0.3, 0, 0.45, 0))
-    Bar(f, UDim2.new(0, 3, 0, 16), UDim2.new(0.15, 0, 0.15, 0))
-    Bar(f, UDim2.new(0, 3, 0, 16), UDim2.new(0.7, 0, 0.15, 0))
+    Bar(f, UDim2.new(0, 12, 0, 8), UDim2.new(0.18, 0, 0.55, 0))
+    Bar(f, UDim2.new(0, 6, 0, 3), UDim2.new(0.32, 0, 0.35, 0))
+    local shackle = Instance.new("Frame")
+    shackle.Size = UDim2.new(0, 10, 0, 6)
+    shackle.Position = UDim2.new(0.25, 0, 0.2, 0)
+    shackle.BackgroundTransparency = 1
+    shackle.Parent = f
+    local s = Instance.new("UIStroke"); s.Color = COLORS.BrightRed; s.Thickness = 2; s.Parent = shackle
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = shackle
+    return f
+end
+Icons.obfusc = function(parent)
+    local f = IconBase(parent)
+    Bar(f, UDim2.new(0, 12, 0, 8), UDim2.new(0.18, 0, 0.55, 0))
+    Bar(f, UDim2.new(0, 6, 0, 3), UDim2.new(0.32, 0, 0.35, 0))
+    local shackle = Instance.new("Frame")
+    shackle.Size = UDim2.new(0, 10, 0, 6)
+    shackle.Position = UDim2.new(0.25, 0, 0.15, 0)
+    shackle.BackgroundTransparency = 1
+    shackle.Parent = f
+    local s = Instance.new("UIStroke"); s.Color = COLORS.BrightRed; s.Thickness = 2; s.Parent = shackle
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = shackle
     return f
 end
 Icons.tools = function(parent)
     local f = IconBase(parent)
     Bar(f, UDim2.new(0, 3, 0, 14), UDim2.new(0.45, 0, 0.3, 0))
     Bar(f, UDim2.new(0, 14, 0, 4), UDim2.new(0.18, 0, 0.12, 0))
+    Bar(f, UDim2.new(0, 6, 0, 3), UDim2.new(0.6, 0, 0.55, 0))
     return f
 end
 Icons.test = function(parent)
@@ -184,33 +201,17 @@ Icons.test = function(parent)
     Bar(f, UDim2.new(0, 3, 0, 6), UDim2.new(0.44, 0, 0.45, 0))
     return f
 end
-Icons.chat = function(parent)
-    local f = IconBase(parent)
-    Bar(f, UDim2.new(0, 16, 0, 10), UDim2.new(0.1, 0, 0.2, 0))
-    local tail = Bar(f, UDim2.new(0, 5, 0, 5), UDim2.new(0.2, 0, 0.75, 0))
-    tail.Rotation = 45
-    Bar(f, UDim2.new(0, 2, 0, 2), UDim2.new(0.3, 0, 0.5, 0), COLORS.Text)
-    Bar(f, UDim2.new(0, 2, 0, 2), UDim2.new(0.5, 0, 0.5, 0), COLORS.Text)
-    Bar(f, UDim2.new(0, 2, 0, 2), UDim2.new(0.7, 0, 0.5, 0), COLORS.Text)
-    return f
-end
 Icons.info = function(parent)
     local f = IconBase(parent)
-    local r = Instance.new("Frame")
-    r.Size = UDim2.new(0, 16, 0, 16); r.Position = UDim2.new(0.12, 0, 0.12, 0)
-    r.BackgroundTransparency = 1; r.Parent = f
-    Stroke(r, COLORS.BrightRed, 2); Corner(r, 8)
-    local dot = Instance.new("Frame")
-    dot.Size = UDim2.new(0, 3, 0, 3); dot.Position = UDim2.new(0.44, 0, 0.28, 0)
-    dot.BackgroundColor3 = COLORS.BrightRed; dot.BorderSizePixel = 0; dot.Parent = f
-    Corner(dot, 2)
-    Bar(f, UDim2.new(0, 3, 0, 6), UDim2.new(0.44, 0, 0.5, 0))
+    local shield = Instance.new("Frame")
+    shield.Size = UDim2.new(0, 16, 0, 18); shield.Position = UDim2.new(0.15, 0, 0.1, 0)
+    shield.BackgroundTransparency = 1; shield.Parent = f
+    local s = Instance.new("UIStroke"); s.Color = COLORS.BrightRed; s.Thickness = 2; s.Parent = shield
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 4); c.Parent = shield
+    Bar(f, UDim2.new(0, 3, 0, 8), UDim2.new(0.44, 0, 0.35, 0), COLORS.BrightRed)
     return f
 end
 
---========================================================
--- TOASTS
---========================================================
 local ToastHolder
 local function Notify(msg, color)
     if not ToastHolder or not ToastHolder.Parent then return end
@@ -241,17 +242,14 @@ local function Notify(msg, color)
     end)
 end
 
---========================================================
--- ANIMATED PROCESS
---========================================================
-local ProcessState = { active = false, frame = nil, label = nil, anim = nil }
+local ProcessState = { active = false, frame = nil, label = nil }
 local function StartProcess(text)
     if not ProcessState.frame or not ProcessState.frame.Parent then return end
     ProcessState.active = true
     ProcessState.frame.Visible = true
     local dots = 0
     local t0 = tick()
-    ProcessState.anim = task.spawn(function()
+    task.spawn(function()
         while ProcessState.active do
             dots = (dots + 1) % 4
             local el = tick() - t0
@@ -265,9 +263,6 @@ local function StopProcess()
     if ProcessState.frame then ProcessState.frame.Visible = false end
 end
 
---========================================================
--- EXECUTOR + FUNCTIONS
---========================================================
 local function GetEnv()
     if type(getgenv) == "function" then
         local ok, env = pcall(getgenv)
@@ -355,9 +350,6 @@ local function Evaluate(loaded, total)
     return pct, grade, color
 end
 
---========================================================
--- COMPILER
---========================================================
 local function SafeDump(fn)
     if type(dumpstring) == "function" then
         local ok, bc = pcall(dumpstring, fn)
@@ -395,9 +387,6 @@ function Compiler.Run(src)
     return res
 end
 
---========================================================
--- DIAMOND DECOMPILER
---========================================================
 local Decompiler = {}
 
 function Decompiler.FromLoadstring(code)
@@ -410,7 +399,7 @@ function Decompiler.ExtractUrl(code)
         or code:match('GetAsync%s*%(%s*["\'](.-)["\']%s*%)')
 end
 function Decompiler.Score(src)
-    if not src or type(src) ~= "string" then return 0, "None", COLORS.BrightRed end
+    if not src or type(src) ~= "string" then return 0, "None" end
     local s = 0
     if #src > 500 then s = s + 1 end
     if #src > 5000 then s = s + 1 end
@@ -420,25 +409,20 @@ function Decompiler.Score(src)
     if src:find("return") then s = s + 1 end
     if src:find("end") then s = s + 1 end
     if not src:find("^%-%- BCL") then s = s + 1 end
-    local grade, color
-    if s >= 8 then grade, color = "💎 Diamond", COLORS.Green
-    elseif s >= 6 then grade, color = "🥇 Gold", COLORS.Green
-    elseif s >= 4 then grade, color = "🥈 Silver", COLORS.Yellow
-    elseif s >= 2 then grade, color = "🥉 Bronze", COLORS.Yellow
-    else grade, color = "❌ Failed", COLORS.BrightRed end
-    return s, grade, color
+    local grade
+    if s >= 8 then grade = "💎 Diamond"
+    elseif s >= 6 then grade = "🥇 Gold"
+    elseif s >= 4 then grade = "🥈 Silver"
+    elseif s >= 2 then grade = "🥉 Bronze"
+    else grade = "❌ Failed" end
+    return s, grade
 end
 
 function Decompiler.M1_URL(code)
     local url = Decompiler.ExtractUrl(code)
     if not url or type(game.HttpGet) ~= "function" then return nil end
     local ok, src = pcall(function() return game:HttpGet(url) end)
-    if ok and src and #src > 0 then
-        if src:find("_bsdata0") or src:find("luarmor.net") then
-            return src, "URL (Luarmor loader — VM encrypted)"
-        end
-        return src, "URL fetch"
-    end
+    if ok and src and #src > 0 then return src, "URL fetch" end
     return nil
 end
 function Decompiler.M2_Closure(fn)
@@ -446,7 +430,7 @@ function Decompiler.M2_Closure(fn)
     local ok, c = pcall(getscriptclosure, fn)
     if ok and c then
         local ok2, src = pcall(decompile, c)
-        if ok2 and src and #src > 0 then return src, "getscriptclosure → decompile" end
+        if ok2 and src and #src > 0 then return src, "getscriptclosure" end
     end
     return nil
 end
@@ -478,7 +462,7 @@ function Decompiler.M5_GCScan()
             if count % 200 == 0 then task.wait() end
         end
     end
-    if best then return best, "getgc scan (largest: " .. bestLen .. " bytes)" end
+    if best then return best, "getgc scan" end
     return nil
 end
 function Decompiler.M6_LoadedModules()
@@ -490,7 +474,7 @@ function Decompiler.M6_LoadedModules()
             table.insert(out, "-- [Module] " .. tostring(mod) .. "\n" .. src)
         end
     end
-    if #out > 0 then return table.concat(out, "\n\n"), "getloadedmodules (" .. #out .. ")" end
+    if #out > 0 then return table.concat(out, "\n\n"), "getloadedmodules" end
     return nil
 end
 function Decompiler.M7_HookLoadstring()
@@ -508,17 +492,56 @@ function Decompiler.M7_HookLoadstring()
     if captured then return captured, "loadstring hook" end
     return nil
 end
-function Decompiler.M8_DirectBytecode(code)
-    if type(getscriptbytecode) ~= "function" or type(decompile) ~= "function" then return nil end
-    local ok, src = pcall(function()
-        local obj = loadstring(code)
-        if obj then
-            local bc = getscriptbytecode(obj)
-            if bc then return decompile(bc) end
-        end
-    end)
-    if ok and src and #src > 0 then return src, "getscriptbytecode direct" end
-    return nil
+
+function Decompiler.Streak(code)
+    local extracted = Decompiler.FromLoadstring(code)
+    local methods = {}
+    local result, usedMethod
+
+    local isLuarmor = code:find("_bsdata0") or code:find("luarmor") or code:find("Luraph")
+    if isLuarmor then table.insert(methods, "⚠ Luarmor") end
+
+    local m1, m1n = Decompiler.M1_URL(code)
+    if m1 then result, usedMethod = m1, m1n; table.insert(methods, "✔ URL") else table.insert(methods, "✘ URL") end
+
+    local fn = type(loadstring) == "function" and loadstring(extracted) or nil
+
+    if not result and fn then
+        local m2, m2n = Decompiler.M2_Closure(fn)
+        if m2 then result, usedMethod = m2, m2n; table.insert(methods, "✔ closure") else table.insert(methods, "✘ closure") end
+    end
+    if not result and fn then
+        local m3, m3n = Decompiler.M3_Direct(fn)
+        if m3 then result, usedMethod = m3, m3n; table.insert(methods, "✔ direct") else table.insert(methods, "✘ direct") end
+    end
+    if not result and fn then
+        local m4, m4n = Decompiler.M4_Bytecode(fn)
+        if m4 then result, usedMethod = m4, m4n; table.insert(methods, "✔ bytecode") else table.insert(methods, "✘ bytecode") end
+    end
+    if not result then
+        local m7, m7n = Decompiler.M7_HookLoadstring()
+        if m7 then result, usedMethod = m7, m7n; table.insert(methods, "✔ hook") else table.insert(methods, "✘ hook") end
+    end
+    if not result then
+        local m5, m5n = Decompiler.M5_GCScan()
+        if m5 then result, usedMethod = m5, m5n; table.insert(methods, "✔ GC") else table.insert(methods, "✘ GC") end
+    end
+    if not result then
+        local m6, m6n = Decompiler.M6_LoadedModules()
+        if m6 then result, usedMethod = m6, m6n; table.insert(methods, "✔ modules") else table.insert(methods, "✘ modules") end
+    end
+
+    if not result then
+        result = "-- BCL 🔥 Streak: all methods failed.\n-- Fragment:\n" .. extracted
+        usedMethod = "fragment only"
+    end
+
+    local score, grade = Decompiler.Score(result)
+    local header = string.format(
+        "-- 🔥 BCL Streak\n-- Method: %s\n-- Quality: %s (%d/8)\n-- Size: %d bytes\n-- Chain:\n  %s\n\n",
+        usedMethod, grade, score, #result, table.concat(methods, "\n  ")
+    )
+    return header .. result
 end
 
 function Decompiler.Diamond(code)
@@ -527,44 +550,39 @@ function Decompiler.Diamond(code)
     local result, usedMethod
 
     local m1, m1n = Decompiler.M1_URL(code)
-    if m1 then result, usedMethod = m1, m1n; table.insert(methods, "✔ " .. m1n) else table.insert(methods, "✘ URL") end
+    if m1 then result, usedMethod = m1, m1n; table.insert(methods, "✔ URL") else table.insert(methods, "✘ URL") end
 
-    local fn = nil
-    if type(loadstring) == "function" then fn = loadstring(extracted) end
+    local fn = type(loadstring) == "function" and loadstring(extracted) or nil
 
     if not result and fn then
         local m2, m2n = Decompiler.M2_Closure(fn)
-        if m2 then result, usedMethod = m2, m2n; table.insert(methods, "✔ " .. m2n) else table.insert(methods, "✘ getscriptclosure") end
+        if m2 then result, usedMethod = m2, m2n; table.insert(methods, "✔ closure") else table.insert(methods, "✘ closure") end
     end
     if not result and fn then
         local m3, m3n = Decompiler.M3_Direct(fn)
-        if m3 then result, usedMethod = m3, m3n; table.insert(methods, "✔ " .. m3n) else table.insert(methods, "✘ decompile(fn)") end
+        if m3 then result, usedMethod = m3, m3n; table.insert(methods, "✔ direct") else table.insert(methods, "✘ direct") end
     end
     if not result and fn then
         local m4, m4n = Decompiler.M4_Bytecode(fn)
-        if m4 then result, usedMethod = m4, m4n; table.insert(methods, "✔ " .. m4n) else table.insert(methods, "✘ decompile(bytecode)") end
+        if m4 then result, usedMethod = m4, m4n; table.insert(methods, "✔ bytecode") else table.insert(methods, "✘ bytecode") end
     end
     if not result then
         local m5, m5n = Decompiler.M5_GCScan()
-        if m5 then result, usedMethod = m5, m5n; table.insert(methods, "✔ " .. m5n) else table.insert(methods, "✘ GC scan") end
+        if m5 then result, usedMethod = m5, m5n; table.insert(methods, "✔ GC") else table.insert(methods, "✘ GC") end
     end
     if not result then
         local m6, m6n = Decompiler.M6_LoadedModules()
-        if m6 then result, usedMethod = m6, m6n; table.insert(methods, "✔ " .. m6n) else table.insert(methods, "✘ getloadedmodules") end
-    end
-    if not result then
-        local m8, m8n = Decompiler.M8_DirectBytecode(code)
-        if m8 then result, usedMethod = m8, m8n; table.insert(methods, "✔ " .. m8n) else table.insert(methods, "✘ direct bytecode") end
+        if m6 then result, usedMethod = m6, m6n; table.insert(methods, "✔ modules") else table.insert(methods, "✘ modules") end
     end
 
     if not result then
-        result = "-- BCL Diamond: all methods failed.\n-- Fragment:\n" .. extracted
+        result = "-- BCL 💎 Diamond: all methods failed.\n-- Fragment:\n" .. extracted
         usedMethod = "fragment only"
     end
 
-    local score, grade, _ = Decompiler.Score(result)
+    local score, grade = Decompiler.Score(result)
     local header = string.format(
-        "-- 💎 BCL Diamond Decompiler\n-- Method: %s\n-- Quality: %s (%d/8)\n-- Size: %d bytes\n-- Chain:\n  %s\n\n",
+        "-- 💎 BCL Diamond\n-- Method: %s\n-- Quality: %s (%d/8)\n-- Size: %d bytes\n-- Chain:\n  %s\n\n",
         usedMethod, grade, score, #result, table.concat(methods, "\n  ")
     )
     return header .. result
@@ -573,30 +591,28 @@ end
 function Decompiler.OldMethod(code)
     local extracted = Decompiler.FromLoadstring(code)
     if type(loadstring) ~= "function" then
-        return "-- BCL [#2 Old]: loadstring unavailable.\n-- Fragment:\n" .. extracted
+        return "-- BCL [#3 Old]: loadstring unavailable.\n-- Fragment:\n" .. extracted
     end
     local fn = loadstring(extracted)
     if not fn then
-        return "-- BCL [#2 Old]: failed to load.\n-- Fragment:\n" .. extracted
+        return "-- BCL [#3 Old]: failed to load.\n-- Fragment:\n" .. extracted
     end
     if type(decompile) == "function" then
         local ok, src = pcall(decompile, fn)
         if ok and src and #src > 0 then
-            return "-- BCL [#2 Old] via decompile(fn).\n-- Size: " .. #src .. " bytes.\n\n" .. src
+            return "-- BCL [#3 Old] via decompile(fn).\n-- Size: " .. #src .. " bytes.\n\n" .. src
         end
     end
-    return "-- BCL [#2 Old]: no method succeeded.\n-- Fragment:\n" .. extracted
+    return "-- BCL [#3 Old]: no method succeeded.\n-- Fragment:\n" .. extracted
 end
 
 function Decompiler.Try(code, method)
     method = method or STATE.DecompMethod
-    if method == 2 then return Decompiler.OldMethod(code)
-    else return Decompiler.Diamond(code) end
+    if method == 1 then return Decompiler.Streak(code)
+    elseif method == 2 then return Decompiler.Diamond(code)
+    else return Decompiler.OldMethod(code) end
 end
 
---========================================================
--- BEAUTIFIER
---========================================================
 local Beautifier = {}
 function Beautifier.Format(src)
     if not src or src == "" then return src end
@@ -618,9 +634,6 @@ function Beautifier.Format(src)
     return table.concat(out, "\n")
 end
 
---========================================================
--- OBFUSCATOR + LUARMOR
---========================================================
 local Obfuscator = {}
 function Obfuscator.Hex(src)
     return (src:gsub('"([^"]*)"', function(s)
@@ -649,61 +662,6 @@ function AntiLuarmor.Detect(code)
     return false
 end
 
---========================================================
--- LUARMOR TOOLKIT
---========================================================
-local LuarmorToolkit = {}
-function LuarmorToolkit.TryAll(code)
-    local results = {}
-    if AntiLuarmor.Detect(code) then
-        table.insert(results, "[Luarmor] Signature detected.")
-    end
-    if type(decompile) == "function" and type(loadstring) == "function" then
-        local fn = loadstring(code)
-        if fn then
-            local ok, src = pcall(decompile, fn)
-            if ok and src and #src > 0 then
-                table.insert(results, "[Method 1] decompile(fn) OK: " .. #src .. " bytes")
-            else
-                table.insert(results, "[Method 1] decompile(fn) failed")
-            end
-        end
-    end
-    if type(getscriptclosure) == "function" and type(decompile) == "function" and type(loadstring) == "function" then
-        local fn = loadstring(code)
-        if fn then
-            local ok, c = pcall(getscriptclosure, fn)
-            if ok and c then
-                local ok2, src = pcall(decompile, c)
-                if ok2 and src and #src > 0 then
-                    table.insert(results, "[Method 2] getscriptclosure OK: " .. #src .. " bytes")
-                else
-                    table.insert(results, "[Method 2] getscriptclosure failed")
-                end
-            end
-        end
-    end
-    if type(hookfunction) == "function" and type(loadstring) == "function" then
-        table.insert(results, "[Method 3] loadstring hook available")
-    end
-    if type(getgc) == "function" and type(decompile) == "function" then
-        local found = 0
-        for _, obj in ipairs(getgc(true)) do
-            if type(obj) == "function" then
-                local ok, src = pcall(decompile, obj)
-                if ok and src and type(src) == "string" and src:find("Luarmor") then
-                    found = found + 1
-                end
-            end
-        end
-        table.insert(results, "[Method 4] getgc scan: " .. found .. " candidates")
-    end
-    return table.concat(results, "\n")
-end
-
---========================================================
--- SAVEINSTANCE
---========================================================
 local SaveInstance = {}
 SaveInstance._buf = nil
 
@@ -813,9 +771,73 @@ function SaveInstance.Save(progressCb)
     return out_count, skipped, processed, total
 end
 
---========================================================
--- PLAYER PROFILE
---========================================================
+local LAG_STATE = { running = false, stop = false, thread = nil }
+
+local function LagStop()
+    LAG_STATE.stop = true
+    if LAG_STATE.thread then
+        pcall(function() task.cancel(LAG_STATE.thread) end)
+    end
+    LAG_STATE.running = false
+    StopProcess()
+    Notify("Lag stopped", COLORS.Yellow)
+end
+
+local function LagMethod1()
+    local char = LP and LP.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then Notify("No character", COLORS.BrightRed) return end
+    local folder = Instance.new("Folder")
+    folder.Name = "BCL_LagParts_" .. tostring(os.time())
+    folder.Parent = workspace
+    while not LAG_STATE.stop do
+        for i = 1, 50 do
+            local p = Instance.new("Part")
+            p.Size = Vector3.new(10, 10, 10)
+            p.Anchored = false
+            p.CanCollide = true
+            p.Position = root.Position + Vector3.new(math.random(-20, 20), math.random(0, 20), math.random(-20, 20))
+            p.Parent = folder
+        end
+        task.wait()
+    end
+    pcall(function() folder:Destroy() end)
+end
+
+local function LagMethod2()
+    local camera = workspace.CurrentCamera
+    local folder = Instance.new("Folder")
+    folder.Name = "BCL_LagFreeze_" .. tostring(os.time())
+    folder.Parent = workspace
+    while not LAG_STATE.stop do
+        for i = 1, 30 do
+            local p = Instance.new("Part")
+            p.Size = Vector3.new(50, 50, 50)
+            p.Anchored = true
+            p.CanCollide = false
+            p.Transparency = 1
+            p.CFrame = camera.CFrame * CFrame.new(math.random(-30, 30), math.random(-30, 30), -math.random(5, 40))
+            p.Parent = folder
+            pcall(function() p.Touched:Connect(function() end) end)
+        end
+        task.wait()
+    end
+    pcall(function() folder:Destroy() end)
+end
+
+local function LagStart(method)
+    if LAG_STATE.running then LagStop() return end
+    LAG_STATE.running = true
+    LAG_STATE.stop = false
+    Notify("Lag Server #" .. method .. " started", COLORS.Yellow)
+    StartProcess(method == 1 and "Lag #1 Spam" or "Lag #2 Freeze")
+    LAG_STATE.thread = task.spawn(function()
+        if method == 1 then LagMethod1() else LagMethod2() end
+        StopProcess()
+        LAG_STATE.running = false
+    end)
+end
+
 local function GetPlayerProfile()
     local name, display, userId, avatar = "?", "?", 0, nil
     if LP then
@@ -830,9 +852,6 @@ local function GetPlayerProfile()
     return name, display, userId, avatar
 end
 
---========================================================
--- UI
---========================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BCL_Main"
 ScreenGui.ResetOnSpawn = false
@@ -1012,7 +1031,6 @@ DragBtn.MouseButton1Click:Connect(function()
     Notify("Drag: " .. (STATE.DragEnabled and "ON" or "OFF"), COLORS.Yellow)
 end)
 
--- Sidebar
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.new(0, 62, 1, -34)
 Sidebar.Position = UDim2.new(0, 0, 0, 34)
@@ -1022,7 +1040,6 @@ Sidebar.ZIndex = 2
 Sidebar.Parent = Main
 Gradient(Sidebar, COLORS.Black, COLORS.DeepRed, 90)
 
--- Process frame — под тайтлом, узкий, не перекрывает страницы
 local ProcessFrame = Instance.new("Frame")
 ProcessFrame.Size = UDim2.new(1, -80, 0, 22)
 ProcessFrame.Position = UDim2.new(0, 70, 0, 34)
@@ -1095,12 +1112,8 @@ local TabCompile, PageCompile = MakeSideTab("compile", "COMP",   2, Icons.compil
 local TabDecomp,  PageDecomp  = MakeSideTab("decomp",  "DECOMP", 3, Icons.decompile)
 local TabTools,   PageTools   = MakeSideTab("tools",   "TOOLS",  4, Icons.tools)
 local TabTest,    PageTest    = MakeSideTab("test",    "TEST",   5, Icons.test)
-local TabChat,    PageChat    = MakeSideTab("chat",    "CHAT",   6, Icons.chat)
-local TabInfo,    PageInfo    = MakeSideTab("info",    "INFO",   7, Icons.info)
+local TabInfo,    PageInfo    = MakeSideTab("info",    "INFO",   6, Icons.info)
 
---========================================================
--- HOME PAGE
---========================================================
 local Welcome = Instance.new("TextLabel")
 Welcome.Size = UDim2.new(1, -16, 0, 46); Welcome.Position = UDim2.new(0, 8, 0, 10)
 Welcome.BackgroundTransparency = 1; Welcome.ZIndex = 3
@@ -1173,7 +1186,7 @@ local function FeatureCard(text, x)
     lbl.Parent = card
 end
 FeatureCard("Decompile\nany script", 0)
-FeatureCard("BazaChat\nbeta", 165)
+FeatureCard("Lag\nServer", 165)
 FeatureCard("Download\nfull place", 330)
 
 local DiscordBtn = Instance.new("TextButton")
@@ -1193,9 +1206,6 @@ DiscordBtn.MouseButton1Click:Connect(function()
     Notify("Discord link copied!", COLORS.DiscordLight)
 end)
 
---========================================================
--- BtnRow helper
---========================================================
 local function BtnRow(parent, y, defs)
     local out = {}
     local total = #defs
@@ -1220,9 +1230,6 @@ local function BtnRow(parent, y, defs)
     return out
 end
 
---========================================================
--- COMPILER PAGE
---========================================================
 local CIn = Instance.new("TextBox")
 CIn.Size = UDim2.new(1, -16, 0, 100); CIn.Position = UDim2.new(0, 8, 0, 6)
 CIn.BackgroundColor3 = COLORS.Black; CIn.TextColor3 = COLORS.Text
@@ -1293,52 +1300,55 @@ CButtons.save.MouseButton1Click:Connect(function()
     end
 end)
 
---========================================================
--- DECOMPILER PAGE
---========================================================
 local MethodLabel = Instance.new("TextLabel")
-MethodLabel.Size = UDim2.new(0, 150, 0, 26); MethodLabel.Position = UDim2.new(0, 8, 0, 6)
+MethodLabel.Size = UDim2.new(0, 130, 0, 26); MethodLabel.Position = UDim2.new(0, 8, 0, 6)
 MethodLabel.BackgroundColor3 = COLORS.Black; MethodLabel.TextColor3 = COLORS.Text
-MethodLabel.Text = "Method: #1 💎 Diamond"
-MethodLabel.Font = Enum.Font.Gotham; MethodLabel.TextSize = 12
+MethodLabel.Text = "Method: #1 🔥 Streak"
+MethodLabel.Font = Enum.Font.Gotham; MethodLabel.TextSize = 11
 MethodLabel.TextXAlignment = Enum.TextXAlignment.Left
 MethodLabel.ZIndex = 3; MethodLabel.Parent = PageDecomp
 Corner(MethodLabel, 5); Stroke(MethodLabel, COLORS.Red, 1)
 local mPad = Instance.new("UIPadding"); mPad.PaddingLeft = UDim.new(0, 6); mPad.Parent = MethodLabel
 
 local MethodBtn1 = Instance.new("TextButton")
-MethodBtn1.Size = UDim2.new(0, 130, 0, 26); MethodBtn1.Position = UDim2.new(0, 166, 0, 6)
-MethodBtn1.Text = "#1 💎 Diamond"
+MethodBtn1.Size = UDim2.new(0, 100, 0, 26); MethodBtn1.Position = UDim2.new(0, 144, 0, 6)
+MethodBtn1.Text = "#1 🔥Streak"
 MethodBtn1.Font = Enum.Font.GothamBold
-MethodBtn1.TextSize = 12; MethodBtn1.ZIndex = 3; MethodBtn1.Parent = PageDecomp
+MethodBtn1.TextSize = 10; MethodBtn1.ZIndex = 3; MethodBtn1.Parent = PageDecomp
 Corner(MethodBtn1, 5); Stroke(MethodBtn1, COLORS.Red, 1)
 
 local MethodBtn2 = Instance.new("TextButton")
-MethodBtn2.Size = UDim2.new(0, 130, 0, 26); MethodBtn2.Position = UDim2.new(0, 302, 0, 6)
-MethodBtn2.Text = "#2 Old"
+MethodBtn2.Size = UDim2.new(0, 100, 0, 26); MethodBtn2.Position = UDim2.new(0, 250, 0, 6)
+MethodBtn2.Text = "#2 💎Diamond"
 MethodBtn2.Font = Enum.Font.GothamBold
-MethodBtn2.TextSize = 12; MethodBtn2.ZIndex = 3; MethodBtn2.Parent = PageDecomp
+MethodBtn2.TextSize = 10; MethodBtn2.ZIndex = 3; MethodBtn2.Parent = PageDecomp
 Corner(MethodBtn2, 5); Stroke(MethodBtn2, COLORS.Red, 1)
+
+local MethodBtn3 = Instance.new("TextButton")
+MethodBtn3.Size = UDim2.new(0, 100, 0, 26); MethodBtn3.Position = UDim2.new(0, 356, 0, 6)
+MethodBtn3.Text = "#3 Old"
+MethodBtn3.Font = Enum.Font.GothamBold
+MethodBtn3.TextSize = 10; MethodBtn3.ZIndex = 3; MethodBtn3.Parent = PageDecomp
+Corner(MethodBtn3, 5); Stroke(MethodBtn3, COLORS.Red, 1)
 
 local function SetMethod(m)
     STATE.DecompMethod = m
-    if m == 1 then
-        MethodLabel.Text = "Method: #1 💎 Diamond"
-        MethodBtn1.BackgroundColor3 = COLORS.Red
-        MethodBtn1.TextColor3 = COLORS.Text
-        MethodBtn2.BackgroundColor3 = COLORS.DeepRed
-        MethodBtn2.TextColor3 = COLORS.SubText
-    else
-        MethodLabel.Text = "Method: #2 Old (Xeno)"
-        MethodBtn1.BackgroundColor3 = COLORS.DeepRed
-        MethodBtn1.TextColor3 = COLORS.SubText
-        MethodBtn2.BackgroundColor3 = COLORS.Red
-        MethodBtn2.TextColor3 = COLORS.Text
+    local labels = {"Method: #1 🔥 Streak", "Method: #2 💎 Diamond", "Method: #3 Old"}
+    MethodLabel.Text = labels[m]
+    for i, b in ipairs({MethodBtn1, MethodBtn2, MethodBtn3}) do
+        if i == m then
+            b.BackgroundColor3 = COLORS.Red
+            b.TextColor3 = COLORS.Text
+        else
+            b.BackgroundColor3 = COLORS.DeepRed
+            b.TextColor3 = COLORS.SubText
+        end
     end
-    Notify("Method " .. (m == 1 and "#1 💎 Diamond" or "#2 Old"), COLORS.Green)
+    Notify("Method " .. labels[m], COLORS.Green)
 end
 MethodBtn1.MouseButton1Click:Connect(function() SetMethod(1) end)
 MethodBtn2.MouseButton1Click:Connect(function() SetMethod(2) end)
+MethodBtn3.MouseButton1Click:Connect(function() SetMethod(3) end)
 SetMethod(1)
 
 local DIn = Instance.new("TextBox")
@@ -1380,7 +1390,8 @@ DButtons.decompile.MouseButton1Click:Connect(function()
         task.wait(1.2)
     end
     DOut.Text = "-- Decompiling...\n"
-    StartProcess(STATE.DecompMethod == 1 and "Diamond Decompilation" or "Decompilation")
+    local methodName = STATE.DecompMethod == 1 and "Streak" or STATE.DecompMethod == 2 and "Diamond" or "Old"
+    StartProcess(methodName .. " Decompilation")
     task.spawn(function()
         local res = Decompiler.Try(code, STATE.DecompMethod)
         StopProcess()
@@ -1408,9 +1419,6 @@ DButtons.save.MouseButton1Click:Connect(function()
     end
 end)
 
---========================================================
--- TOOLS PAGE
---========================================================
 local TIn = Instance.new("TextBox")
 TIn.Size = UDim2.new(1, -16, 0, 60); TIn.Position = UDim2.new(0, 8, 0, 6)
 TIn.BackgroundColor3 = COLORS.Black; TIn.TextColor3 = COLORS.Text
@@ -1445,8 +1453,31 @@ TDownload.TextSize = 13; TDownload.ZIndex = 3; TDownload.Parent = PageTools
 Corner(TDownload, 5); Gradient(TDownload, COLORS.DarkRed, COLORS.BrightRed, 0)
 Hover(TDownload, COLORS.Red, COLORS.BrightRed)
 
+local LagLabel = Instance.new("TextLabel")
+LagLabel.Size = UDim2.new(0, 130, 0, 26); LagLabel.Position = UDim2.new(0, 8, 0, 144)
+LagLabel.BackgroundColor3 = COLORS.Black; LagLabel.Text = "Lag Server"
+LagLabel.TextColor3 = COLORS.Text; LagLabel.Font = Enum.Font.GothamBold
+LagLabel.TextSize = 12; LagLabel.TextXAlignment = Enum.TextXAlignment.Left
+LagLabel.ZIndex = 3; LagLabel.Parent = PageTools
+Corner(LagLabel, 5); Stroke(LagLabel, COLORS.Red, 1)
+local lagPad = Instance.new("UIPadding"); lagPad.PaddingLeft = UDim.new(0, 6); lagPad.Parent = LagLabel
+
+local LagBtn1 = Instance.new("TextButton")
+LagBtn1.Size = UDim2.new(0, 130, 0, 26); LagBtn1.Position = UDim2.new(0, 146, 0, 144)
+LagBtn1.BackgroundColor3 = COLORS.Red; LagBtn1.Text = "#1 Spam"
+LagBtn1.TextColor3 = COLORS.Text; LagBtn1.Font = Enum.Font.GothamBold
+LagBtn1.TextSize = 12; LagBtn1.ZIndex = 3; LagBtn1.Parent = PageTools
+Corner(LagBtn1, 5); Gradient(LagBtn1, COLORS.DarkRed, COLORS.BrightRed, 0)
+
+local LagBtn2 = Instance.new("TextButton")
+LagBtn2.Size = UDim2.new(0, 130, 0, 26); LagBtn2.Position = UDim2.new(0, 282, 0, 144)
+LagBtn2.BackgroundColor3 = COLORS.DeepRed; LagBtn2.Text = "#2 Freeze"
+LagBtn2.TextColor3 = COLORS.Text; LagBtn2.Font = Enum.Font.GothamBold
+LagBtn2.TextSize = 12; LagBtn2.ZIndex = 3; LagBtn2.Parent = PageTools
+Corner(LagBtn2, 5); Stroke(LagBtn2, COLORS.Red, 1)
+
 local SpeedLabel = Instance.new("TextLabel")
-SpeedLabel.Size = UDim2.new(0, 130, 0, 26); SpeedLabel.Position = UDim2.new(0, 8, 0, 144)
+SpeedLabel.Size = UDim2.new(0, 130, 0, 26); SpeedLabel.Position = UDim2.new(0, 8, 0, 178)
 SpeedLabel.BackgroundColor3 = COLORS.Black
 SpeedLabel.Text = "Objects/sec: " .. STATE.Speed
 SpeedLabel.TextColor3 = COLORS.Text; SpeedLabel.Font = Enum.Font.Gotham
@@ -1456,7 +1487,7 @@ Corner(SpeedLabel, 5); Stroke(SpeedLabel, COLORS.Red, 1)
 local spdPad = Instance.new("UIPadding"); spdPad.PaddingLeft = UDim.new(0, 6); spdPad.Parent = SpeedLabel
 
 local SpeedSliderBg = Instance.new("Frame")
-SpeedSliderBg.Size = UDim2.new(0, 280, 0, 8); SpeedSliderBg.Position = UDim2.new(0, 146, 0, 153)
+SpeedSliderBg.Size = UDim2.new(0, 280, 0, 8); SpeedSliderBg.Position = UDim2.new(0, 146, 0, 187)
 SpeedSliderBg.BackgroundColor3 = COLORS.DeepRed; SpeedSliderBg.BorderSizePixel = 0
 SpeedSliderBg.ZIndex = 3; SpeedSliderBg.Parent = PageTools
 Corner(SpeedSliderBg, 4)
@@ -1490,10 +1521,24 @@ end
 SpeedSliderBg.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
        or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true; updateFromInput(input)
+        dragging = true
+        updateFromInput(input)
+    end
+end)
+SpeedKnob.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+       or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        updateFromInput(input)
     end
 end)
 SpeedSliderBg.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+       or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+SpeedKnob.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
        or input.UserInputType == Enum.UserInputType.Touch then
         dragging = false
@@ -1508,14 +1553,15 @@ UIS.InputChanged:Connect(function(input)
     end
 end)
 
-local TButtons = BtnRow(PageTools, 178, {
-    {key="copy",  text="COPY"},
-    {key="clear", text="CLEAR"},
-    {key="save",  text="SAVE"},
+local TButtons = BtnRow(PageTools, 212, {
+    {key="copy",   text="COPY"},
+    {key="clear",  text="CLEAR"},
+    {key="save",   text="SAVE"},
+    {key="clearall", text="CLEAR ALL"},
 })
 
 local TOut = Instance.new("TextBox")
-TOut.Size = UDim2.new(1, -16, 1, -220); TOut.Position = UDim2.new(0, 8, 0, 214)
+TOut.Size = UDim2.new(1, -16, 1, -254); TOut.Position = UDim2.new(0, 8, 0, 248)
 TOut.BackgroundColor3 = COLORS.Black; TOut.TextColor3 = COLORS.Text
 TOut.Font = Enum.Font.Code; TOut.TextSize = 11
 TOut.TextWrapped = true
@@ -1581,6 +1627,9 @@ TDownload.MouseButton1Click:Connect(function()
     end
 end)
 
+LagBtn1.MouseButton1Click:Connect(function() LagStart(1) end)
+LagBtn2.MouseButton1Click:Connect(function() LagStart(2) end)
+
 TButtons.copy.MouseButton1Click:Connect(function()
     if type(setclipboard) == "function" then
         pcall(setclipboard, TOut.Text)
@@ -1596,10 +1645,13 @@ TButtons.save.MouseButton1Click:Connect(function()
         Notify("Saved: BCL_tools_out.lua", COLORS.Green)
     end
 end)
+TButtons.clearall.MouseButton1Click:Connect(function()
+    CIn.Text = ""; COut.Text = "-- BCL Compiler ready."
+    DIn.Text = ""; DOut.Text = "-- BCL Decompiler ready."
+    TIn.Text = ""; TOut.Text = "-- BCL Tools ready."
+    Notify("All cleared", COLORS.Green)
+end)
 
---========================================================
--- TEST PAGE
---========================================================
 local TestInfo = Instance.new("TextLabel")
 TestInfo.Size = UDim2.new(1, -16, 0, 32); TestInfo.Position = UDim2.new(0, 8, 0, 6)
 TestInfo.BackgroundColor3 = COLORS.Black; TestInfo.TextColor3 = COLORS.SubText
@@ -1683,215 +1735,6 @@ TestButtons.sunc.MouseButton1Click:Connect(function()
     end)
 end)
 
---========================================================
--- BAZA CHAT (beta)
---========================================================
-local ChatInfo = Instance.new("TextLabel")
-ChatInfo.Size = UDim2.new(1, -16, 0, 32); ChatInfo.Position = UDim2.new(0, 8, 0, 6)
-ChatInfo.BackgroundColor3 = COLORS.Black; ChatInfo.TextColor3 = COLORS.SubText
-ChatInfo.Font = Enum.Font.Gotham; ChatInfo.TextSize = 12
-ChatInfo.Text = "BazaChat (beta) — send a script + task, BCL does it."
-ChatInfo.TextXAlignment = Enum.TextXAlignment.Left
-ChatInfo.ZIndex = 3; ChatInfo.Parent = PageChat
-Corner(ChatInfo, 5); Stroke(ChatInfo, COLORS.Red, 1)
-local cip = Instance.new("UIPadding")
-cip.PaddingLeft = UDim.new(0, 8); cip.PaddingRight = UDim.new(0, 8); cip.Parent = ChatInfo
-
-local ChatInput = Instance.new("TextBox")
-ChatInput.Size = UDim2.new(1, -16, 0, 100); ChatInput.Position = UDim2.new(0, 8, 0, 46)
-ChatInput.BackgroundColor3 = COLORS.Black; ChatInput.TextColor3 = COLORS.Text
-ChatInput.PlaceholderText = "Paste script or task (e.g. 'decompile this', 'obfuscate L2', 'download place', 'analysis')"
-ChatInput.PlaceholderColor3 = COLORS.SubText
-ChatInput.Font = Enum.Font.Code; ChatInput.TextSize = 12
-ChatInput.TextWrapped = true
-ChatInput.TextXAlignment = Enum.TextXAlignment.Left
-ChatInput.TextYAlignment = Enum.TextYAlignment.Top
-ChatInput.ClearTextOnFocus = false; ChatInput.ZIndex = 3; ChatInput.Parent = PageChat
-Corner(ChatInput, 5); Stroke(ChatInput, COLORS.Red, 1); Pad(ChatInput, 6)
-
-local ChatButtons = BtnRow(PageChat, 154, {
-    {key="send",   text="SEND",   color=COLORS.Red},
-    {key="clear",  text="CLEAR"},
-    {key="save",   text="SAVE"},
-})
-
-local ChatOut = Instance.new("TextBox")
-ChatOut.Size = UDim2.new(1, -16, 1, -196); ChatOut.Position = UDim2.new(0, 8, 0, 190)
-ChatOut.BackgroundColor3 = COLORS.Black; ChatOut.TextColor3 = COLORS.Text
-ChatOut.Font = Enum.Font.Code; ChatOut.TextSize = 11
-ChatOut.TextWrapped = true
-ChatOut.TextXAlignment = Enum.TextXAlignment.Left
-ChatOut.TextYAlignment = Enum.TextYAlignment.Top
-ChatOut.TextEditable = false; ChatOut.ClearTextOnFocus = false
-ChatOut.ZIndex = 3; ChatOut.Text = "-- BazaChat ready. Describe your task."
-ChatOut.Parent = PageChat
-Corner(ChatOut, 5); Stroke(ChatOut, COLORS.Red, 1); Pad(ChatOut, 6)
-
-local function ParseChatIntent(text)
-    local t = text:lower()
-    if t:find("luarmor") or t:find("luraph") then return "luarmor" end
-    if t:find("decompil") then return "decompile" end
-    if t:find("compil") then return "compile" end
-    if t:find("obfusc") then return "obfuscate" end
-    if t:find("download") or t:find("place") or t:find("instance") then return "download" end
-    if t:find("unc") or t:find("sunc") then return "unc" end
-    if t:find("test") then return "test" end
-    if t:find("analysis") or t:find("analyz") or t:find("check") then return "analysis" end
-    if t:find("hook") then return "hook" end
-    if t:find("gc") or t:find("memory") then return "gc" end
-    return "unknown"
-end
-
-local function ChatRespond(intent, rawText)
-    if intent == "luarmor" then
-        ChatOut.Text = "-- BazaChat: Luarmor task detected.\n"
-        StartProcess("Luarmor Analysis")
-        task.spawn(function()
-            local res = LuarmorToolkit.TryAll(rawText)
-            StopProcess()
-            ChatOut.Text = ChatOut.Text .. res .. "\n"
-            Notify("Luarmor analysis done", COLORS.Green)
-        end)
-    elseif intent == "decompile" then
-        ChatOut.Text = "-- BazaChat: Decompiling...\n"
-        StartProcess(STATE.DecompMethod == 1 and "Diamond Decompilation" or "Decompilation")
-        task.spawn(function()
-            local res = Decompiler.Try(rawText, STATE.DecompMethod)
-            StopProcess()
-            ChatOut.Text = res
-            Notify("Decompiled", COLORS.Green)
-        end)
-    elseif intent == "compile" then
-        ChatOut.Text = "-- BazaChat: Compiling...\n"
-        StartProcess("Compilation")
-        task.spawn(function()
-            local bc, err = Compiler.Compile(rawText)
-            StopProcess()
-            if bc then
-                ChatOut.Text = "-- Compilation OK.\n-- Bytecode: " .. #bc .. " bytes.\n\n" .. (bc:sub(1,512):gsub(".", function(c) return string.format("%02X ", c:byte()) end))
-            else
-                ChatOut.Text = "-- " .. tostring(err)
-            end
-            Notify("Compiled", COLORS.Green)
-        end)
-    elseif intent == "obfuscate" then
-        ChatOut.Text = "-- BazaChat: Obfuscating L2...\n"
-        StartProcess("Obfuscation")
-        task.spawn(function()
-            local res = Obfuscator.Run(rawText, 2)
-            StopProcess()
-            ChatOut.Text = res
-            Notify("Obfuscated L2", COLORS.Green)
-        end)
-    elseif intent == "download" then
-        ChatOut.Text = "-- BazaChat: Download Place started...\n"
-        StartProcess("Analysis")
-        task.spawn(function()
-            local ok, count, skipped, processed, total = pcall(function()
-                return SaveInstance.Save(function(p, t, c, s)
-                    ChatOut.Text = string.format("-- Scanning: %d / %d | found: %d | skipped: %d", p, t, c, s)
-                end)
-            end)
-            StopProcess()
-            if ok then
-                ChatOut.Text = string.format("-- Download Place complete.\n-- Scanned: %d / %d\n-- Found: %d\n-- Skipped: %d\n-- Saved: BCL_SaveInstance.lua",
-                    processed, total, count, skipped)
-                Notify("Download done: " .. tostring(count), COLORS.Green)
-            else
-                ChatOut.Text = "-- Download failed: " .. tostring(count)
-                Notify("Download failed", COLORS.BrightRed)
-            end
-        end)
-    elseif intent == "unc" then
-        ChatOut.Text = "-- BazaChat: Running UNC test...\n"
-        StartProcess("Test UNC")
-        task.spawn(function()
-            local ok = pcall(function()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/unified-naming-convention/NamingStandard/main/UNCCheckEnv.lua"))()
-            end)
-            StopProcess()
-            ChatOut.Text = ChatOut.Text .. (ok and "-- UNC loaded." or "-- UNC failed.")
-            Notify("UNC done", COLORS.Green)
-        end)
-    elseif intent == "analysis" then
-        ChatOut.Text = "-- BazaChat: Analysis...\n"
-        StartProcess("Analysis")
-        task.spawn(function()
-            local funcs = {loadstring, decompile, getscriptbytecode, getscriptclosure, getgc, hookfunction, dumpstring}
-            local names = {"loadstring","decompile","getscriptbytecode","getscriptclosure","getgc","hookfunction","dumpstring"}
-            local lines = {"-- Executor capabilities:"}
-            for i, f in ipairs(funcs) do
-                table.insert(lines, string.format("  %-22s : %s", names[i], type(f)))
-            end
-            StopProcess()
-            ChatOut.Text = table.concat(lines, "\n")
-            Notify("Analysis done", COLORS.Green)
-        end)
-    elseif intent == "hook" then
-        ChatOut.Text = "-- BazaChat: Hooking loadstring...\n"
-        StartProcess("Hook setup")
-        task.spawn(function()
-            if type(hookfunction) == "function" then
-                local old_ls = loadstring
-                hookfunction(loadstring, function(src, name)
-                    ChatOut.Text = ChatOut.Text .. "\n-- [HOOK] loadstring called: " .. #tostring(src) .. " bytes"
-                    return old_ls(src, name)
-                end)
-                StopProcess()
-                ChatOut.Text = ChatOut.Text .. "\n-- Hook installed. Run target script now."
-                Notify("loadstring hooked", COLORS.Green)
-            else
-                StopProcess()
-                ChatOut.Text = ChatOut.Text .. "\n-- hookfunction unavailable."
-            end
-        end)
-    elseif intent == "gc" then
-        ChatOut.Text = "-- BazaChat: GC scan...\n"
-        StartProcess("GC scan")
-        task.spawn(function()
-            local found = 0
-            for _, obj in ipairs(getgc(true)) do
-                if type(obj) == "function" then
-                    local ok, src = pcall(decompile, obj)
-                    if ok and src and #src > 200 then found = found + 1 end
-                end
-            end
-            StopProcess()
-            ChatOut.Text = ChatOut.Text .. "-- Found " .. found .. " candidate functions."
-            Notify("GC scan done", COLORS.Green)
-        end)
-    else
-        ChatOut.Text = "-- BazaChat: unknown intent.\n-- Try: decompile / compile / obfuscate / download / unc / analysis / hook / gc / luarmor"
-        Notify("Unknown task", COLORS.Yellow)
-    end
-end
-
-ChatButtons.send.MouseButton1Click:Connect(function()
-    local txt = ChatInput.Text
-    if txt == "" then
-        ChatOut.Text = "-- BazaChat: empty input."
-        return
-    end
-    local intent = ParseChatIntent(txt)
-    if intent == "unknown" and (#txt > 50) then
-        intent = "decompile"
-    end
-    ChatRespond(intent, txt)
-end)
-ChatButtons.clear.MouseButton1Click:Connect(function()
-    ChatInput.Text = ""
-    ChatOut.Text = "-- BazaChat ready."
-end)
-ChatButtons.save.MouseButton1Click:Connect(function()
-    if type(writefile) == "function" then
-        pcall(writefile, "BCL_chat_out.txt", ChatOut.Text)
-        Notify("Saved: BCL_chat_out.txt", COLORS.Green)
-    end
-end)
-
---========================================================
--- INFO PAGE
---========================================================
 local ProfileCard = Instance.new("Frame")
 ProfileCard.Size = UDim2.new(1, 0, 0, 80); ProfileCard.Position = UDim2.new(0, 0, 0, 6)
 ProfileCard.BackgroundColor3 = COLORS.Black; ProfileCard.BorderSizePixel = 0
@@ -2017,9 +1860,6 @@ RefreshInfo()
 Breathe(mainStroke, COLORS.BrightRed, COLORS.DarkRed, 3)
 TabHome.MouseButton1Click:Fire()
 
---========================================================
--- AUTO-UPDATE POLLING
---========================================================
 task.spawn(function()
     task.wait(5)
     while ScreenGui.Parent do
